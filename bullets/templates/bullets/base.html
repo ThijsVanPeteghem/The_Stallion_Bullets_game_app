@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}The Stallion Bullets{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'bullets/style.css' %}?v=compact-print-20261006">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% url 'home' %}">
+      <img src="{% static 'bullets/stallion_bullets_logo.png' %}" alt="The Stallion Bullets">
+      <span>The Stallion Bullets</span>
+    </a>
+    <nav>
+      <a href="{% url 'home' %}">Overzicht</a>
+      <a href="{% url 'new_evening' %}">Nieuwe avond</a>
+      <a href="{% url 'seasons' %}">Seizoenen</a>
+      <a href="{% url 'players' %}">Spelers</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>The Stallion Bullets · Competitiebeheer</footer>
+</body>
+</html>

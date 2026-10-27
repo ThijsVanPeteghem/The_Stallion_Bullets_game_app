@@ -1,0 +1,7 @@
+{% extends "bullets/base.html" %}
+{% block title %}Seizoenstand {{ season.name }} | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{% url 'season_detail' season.id %}">{{ season.name }}</a></p>
+<h1>Seizoenklassement</h1>
+<section class="panel">{% include "bullets/standings_table.html" with standings=standings show_referees=True %}</section>
+{% endblock %}

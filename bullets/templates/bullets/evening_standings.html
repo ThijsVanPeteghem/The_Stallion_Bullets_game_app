@@ -1,0 +1,14 @@
+{% extends "bullets/base.html" %}
+{% block title %}Tussenstand {{ evening.date|date:"d/m/Y" }} | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{% url 'season_detail' evening.season_id %}">{{ evening.season }}</a> · {{ evening.date|date:"d/m/Y" }}</p>
+<div class="section-heading">
+  <div><h1>Tussenstand van de avond</h1><p class="muted">{{ complete_count }}/{{ matches|length }} uitslagen ingevoerd · In gelote volgorde</p></div>
+  <a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Naar wedstrijdschema</a>
+</div>
+{% include "bullets/evening_tabs.html" with active_tab="standings" %}
+<section class="panel">
+  <div class="section-heading"><h2>Klassement van de avond</h2><span class="muted">Wordt bijgewerkt na het invoeren van uitslagen</span></div>
+  {% include "bullets/standings_table.html" with standings=standings %}
+</section>
+{% endblock %}

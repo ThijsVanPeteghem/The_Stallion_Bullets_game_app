@@ -1,0 +1,39 @@
+{% extends "bullets/base.html" %}
+{% block title %}Overzicht | The Stallion Bullets{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">DARTCOMPETITIE</p>
+    <h1>Welkom bij The Stallion Bullets</h1>
+    <p>Beheer competitieavonden, uitslagen en klassementen op één plek.</p>
+    <a class="button" href="{% url 'new_evening' %}">Competitieavond aanmaken</a>
+  </div>
+</section>
+<div class="columns">
+  <section class="panel">
+    <div class="section-heading"><h2>Seizoenen</h2><a href="{% url 'seasons' %}">Beheren</a></div>
+    {% if seasons %}
+      <ul class="link-list">
+        {% for season in seasons %}
+          <li><a href="{% url 'season_detail' season.id %}">{{ season.name }}</a><span>{{ season.evenings.count }} avonden</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Maak eerst een seizoen aan om een competitieavond te starten.</p>
+      <a class="button button-secondary" href="{% url 'seasons' %}">Seizoen aanmaken</a>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>Recente avonden</h2>
+    {% if recent_evenings %}
+      <ul class="link-list">
+        {% for evening in recent_evenings %}
+          <li><a href="{% url 'evening_detail' evening.id %}">{{ evening.date|date:"d/m/Y" }}</a><span>{{ evening.season }}</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Nog geen avonden ingevoerd.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

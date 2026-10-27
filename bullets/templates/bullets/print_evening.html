@@ -1,0 +1,46 @@
+{% load static %}
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wedstrijdbriefjes - The Stallion Bullets</title>
+  <link rel="stylesheet" href="{% static 'bullets/style.css' %}?v=compact-print-20261006">
+</head>
+<body class="print-page">
+  <div class="print-toolbar">
+    <strong>Wedstrijdbriefjes · {{ evening.date|date:"d/m/Y" }}</strong>
+    <div><button class="button" onclick="window.print()">Afdrukken</button> <a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Terug</a></div>
+  </div>
+  {% for item in matches %}
+  {% with match=item.match %}
+  <article class="match-slip">
+    <div class="slip-meta">
+      <span>Dartblok: <b>{{ match.board }}</b></span>
+      <span>Wedstrijd: <b>{{ match.number }}</b></span>
+      <span>Ronde: <b>{{ match.round_number }}</b></span>
+      <span>Datum: <b>{{ evening.date|date:"d/m/Y" }}</b></span>
+    </div>
+    <table class="slip-table">
+      <thead><tr><th>Speler</th><th>Legs<br>gewonnen</th><th>171</th><th>174</th><th>177</th><th>180</th><th>HF<br>(100+)</th><th>MP<br>(≤15)</th></tr></thead>
+      <tbody>
+        {% for row in item.player_rows %}
+        <tr>
+          <th>{{ row.player }}</th>
+          <td>{{ row.legs_won|default_if_none:"" }}</td>
+          <td>{{ row.scores_171|default_if_none:"" }}</td>
+          <td>{{ row.scores_174|default_if_none:"" }}</td>
+          <td>{{ row.scores_177|default_if_none:"" }}</td>
+          <td>{{ row.scores_180|default_if_none:"" }}</td>
+          <td>{{ row.high_finishes|default_if_none:"" }}</td>
+          <td>{{ row.least_darts }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="slip-referee">Scheidsrechter: <b>{% if match.referee %}{{ match.referee }}{% else %}____________________{% endif %}</b></div>
+  </article>
+  {% endwith %}
+  {% endfor %}
+</body>
+</html>

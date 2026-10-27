@@ -1,0 +1,15 @@
+{% extends "bullets/base.html" %}
+{% block title %}Schema opnieuw opmaken | The Stallion Bullets{% endblock %}
+{% block content %}
+<h1>Schema opnieuw opmaken</h1>
+<section class="panel narrow">
+  <p>Het schema van <strong>{{ evening.date|date:"d/m/Y" }}</strong> wordt opnieuw berekend voor {{ evening.match_count }} wedstrijden per speler met maximaal {{ evening.board_count }} dartsblokken. De spelersvolgorde blijft behouden.</p>
+  <p>Dit vervangt de huidige wedstrijden. Uitslagen en statistieken kunnen niet behouden blijven.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" class="actions">
+    {% csrf_token %}
+    <button class="button" type="submit">Schema opnieuw opmaken</button>
+    <a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Annuleren</a>
+  </form>
+</section>
+{% endblock %}

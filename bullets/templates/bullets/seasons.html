@@ -1,0 +1,18 @@
+{% extends "bullets/base.html" %}
+{% block title %}Seizoenen | The Stallion Bullets{% endblock %}
+{% block content %}
+<h1>Seizoenen</h1>
+<div class="columns">
+  <section class="panel">
+    <h2>Nieuw seizoen</h2>
+    <form method="post">{% csrf_token %}
+      {{ form.as_p }}
+      <button class="button" type="submit">Seizoen opslaan</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Bestaande seizoenen</h2>
+    <ul class="link-list">{% for season in seasons %}<li><a href="{% url 'season_detail' season.id %}">{{ season.name }}</a><span>{{ season.evenings.count }} avonden</span></li>{% empty %}<li class="muted">Nog geen seizoenen.</li>{% endfor %}</ul>
+  </section>
+</div>
+{% endblock %}

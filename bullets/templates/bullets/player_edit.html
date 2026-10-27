@@ -1,0 +1,19 @@
+{% extends "bullets/base.html" %}
+{% block title %}Speler bewerken | The Stallion Bullets{% endblock %}
+{% block content %}
+<h1>Speler bewerken</h1>
+<section class="panel narrow">
+  <form method="post">{% csrf_token %}
+    {% for field in form %}
+      <div class="form-row">
+        {{ field.label_tag }}{{ field }}
+        {% for error in field.errors %}<span class="error">{{ error }}</span>{% endfor %}
+      </div>
+    {% endfor %}
+    <div class="actions">
+      <button class="button" type="submit">Wijzigingen opslaan</button>
+      <a class="button button-secondary" href="{% url 'players' %}">Annuleren</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

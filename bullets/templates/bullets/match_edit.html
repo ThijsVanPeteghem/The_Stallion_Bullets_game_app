@@ -1,0 +1,50 @@
+{% extends "bullets/base.html" %}
+{% block title %}Wedstrijd {{ match.number }} | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{% url 'evening_detail' evening.id %}">{{ evening.date|date:"d/m/Y" }}</a> · Blok {{ match.board }} · Ronde {{ match.round_number }}</p>
+<h1>Wedstrijd {{ match.number }}</h1>
+<section class="panel">
+  <div class="section-heading">
+    <h2>{{ match.player1 }} <span class="muted">vs</span> {% if match.player2 %}{{ match.player2 }}{% else %}Stroman{% endif %}</h2>
+    {% if match.referee %}<span class="muted">Scheidsrechter: {{ match.referee }}</span>{% endif %}
+  </div>
+  {% if form.non_field_errors %}<div class="error">{{ form.non_field_errors }}</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    <div class="table-wrap result-table-wrap">
+      <table class="result-entry-table">
+        <thead>
+          <tr>
+            <th>Speler</th><th>Legs<br>gewonnen</th><th>171</th><th>174</th><th>177</th><th>180</th><th>HF<br>(waarden 100+)</th><th>MP<br>(≤15)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">{{ match.player1 }}</th>
+            <td><label class="visually-hidden" for="{{ form.p1_legs.id_for_label }}">{{ form.p1_legs.label }}</label>{{ form.p1_legs }}{% for error in form.p1_legs.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p1_171.id_for_label }}">{{ form.p1_171.label }}</label>{{ form.p1_171 }}{% for error in form.p1_171.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p1_174.id_for_label }}">{{ form.p1_174.label }}</label>{{ form.p1_174 }}{% for error in form.p1_174.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p1_177.id_for_label }}">{{ form.p1_177.label }}</label>{{ form.p1_177 }}{% for error in form.p1_177.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p1_180.id_for_label }}">{{ form.p1_180.label }}</label>{{ form.p1_180 }}{% for error in form.p1_180.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p1_high_finishes.id_for_label }}">{{ form.p1_high_finishes.label }}</label>{{ form.p1_high_finishes }}{% for error in form.p1_high_finishes.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p1_least_darts.id_for_label }}">{{ form.p1_least_darts.label }}</label>{{ form.p1_least_darts }}{% for error in form.p1_least_darts.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+          </tr>
+          {% if match.player2 %}
+          <tr>
+            <th scope="row">{{ match.player2 }}</th>
+            <td><label class="visually-hidden" for="{{ form.p2_legs.id_for_label }}">{{ form.p2_legs.label }}</label>{{ form.p2_legs }}{% for error in form.p2_legs.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p2_171.id_for_label }}">{{ form.p2_171.label }}</label>{{ form.p2_171 }}{% for error in form.p2_171.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p2_174.id_for_label }}">{{ form.p2_174.label }}</label>{{ form.p2_174 }}{% for error in form.p2_174.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p2_177.id_for_label }}">{{ form.p2_177.label }}</label>{{ form.p2_177 }}{% for error in form.p2_177.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p2_180.id_for_label }}">{{ form.p2_180.label }}</label>{{ form.p2_180 }}{% for error in form.p2_180.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p2_high_finishes.id_for_label }}">{{ form.p2_high_finishes.label }}</label>{{ form.p2_high_finishes }}{% for error in form.p2_high_finishes.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+            <td><label class="visually-hidden" for="{{ form.p2_least_darts.id_for_label }}">{{ form.p2_least_darts.label }}</label>{{ form.p2_least_darts }}{% for error in form.p2_least_darts.errors %}<span class="error">{{ error }}</span>{% endfor %}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <p class="result-entry-help muted">Vul HF-waarden van 100 of hoger in en pijlen per leg van maximaal 15, telkens gescheiden door komma’s. Bijvoorbeeld: HF 100, 120 · MP 13, 15.</p>
+    <div class="actions"><button class="button" type="submit">Uitslag opslaan</button><a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Annuleren</a></div>
+  </form>
+</section>
+{% endblock %}

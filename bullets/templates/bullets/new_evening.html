@@ -1,0 +1,113 @@
+{% extends "bullets/base.html" %}
+{% block title %}Nieuwe avond | The Stallion Bullets{% endblock %}
+{% block content %}
+<h1>Nieuwe competitieavond</h1>
+<section class="panel">
+  <p>Selecteer alleen de aanwezige spelers. De volgorde waarin je ze aanvinkt is hun lotingsvolgorde en bepaalt het wedstrijdschema.</p>
+  {% if not form.fields.season.queryset.exists %}
+    <p class="error">Maak eerst een seizoen aan via <a href="{% url 'seasons' %}">Seizoenen</a>.</p>
+  {% endif %}
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="columns evening-settings">
+      <div>
+        {{ form.season.label_tag }}{{ form.season }}
+        {% for error in form.season.errors %}<span class="error">{{ error }}</span>{% endfor %}
+      </div>
+      <div>
+        {{ form.date.label_tag }}{{ form.date }}
+        {% for error in form.date.errors %}<span class="error">{{ error }}</span>{% endfor %}
+      </div>
+      <div>
+        {{ form.board_count.label_tag }}{{ form.board_count }}
+        <small>Kies van 2 tot en met 30 blokken.</small>
+        {% for error in form.board_count.errors %}<span class="error">{{ error }}</span>{% endfor %}
+      </div>
+      <div>
+        {{ form.match_count.label_tag }}{{ form.match_count }}
+        <small>Kies van 1 tot en met 20 wedstrijden per speler.</small>
+        {% for error in form.match_count.errors %}<span class="error">{{ error }}</span>{% endfor %}
+      </div>
+    </div>
+    <div class="section-heading selection-heading">
+      <div><h2>Aanwezige spelers</h2><p class="muted">Vink spelers aan in de gelote volgorde (4–128).</p></div>
+      <span id="selection-count" class="badge">0 geselecteerd</span>
+    </div>
+    <p id="small-field-note" class="small-field-note" hidden></p>
+    {% for error in form.players.errors %}<p class="error">{{ error }}</p>{% endfor %}
+    {% if form.players.field.queryset %}
+      <div class="player-selection">{{ form.players }}</div>
+    {% else %}
+      <p class="muted">Er staan nog geen actieve spelers in de spelerslijst. Voeg ze eerst toe via <a href="{% url 'players' %}">Spelers</a>.</p>
+    {% endif %}
+    <div class="selection-order">
+      <strong>Lotingsvolgorde</strong>
+      <ol id="draw-order-list"><li class="muted">Vink spelers aan om hun volgorde te bepalen.</li></ol>
+    </div>
+    {{ form.draw_order }}
+    {% for error in form.draw_order.errors %}<span class="error">{{ error }}</span>{% endfor %}
+    <button class="button" type="submit">Schema maken</button>
+  </form>
+</section>
+<script>
+(() => {
+  const checkboxes = [...document.querySelectorAll('input[name="players"]')];
+  const orderInput = document.getElementById("id_draw_order");
+  const orderList = document.getElementById("draw-order-list");
+  const count = document.getElementById("selection-count");
+  const smallFieldNote = document.getElementById("small-field-note");
+  const matchCountInput = document.getElementById("id_match_count");
+  const names = new Map(checkboxes.map(box => [box.value, box.closest("label").textContent.trim()]));
+  const selectedOrder = (() => {
+    try { return JSON.parse(orderInput.value || "[]").map(String); }
+    catch { return []; }
+  })();
+  const order = selectedOrder.filter(id =>
+    checkboxes.some(box => box.value === id && box.checked)
+  );
+  checkboxes.forEach(box => {
+    if (box.checked && !order.includes(box.value)) order.push(box.value);
+    const number = document.createElement("span");
+    number.className = "draw-number";
+    box.closest("label").append(number);
+    box.addEventListener("change", () => {
+      const index = order.indexOf(box.value);
+      if (box.checked && index === -1) order.push(box.value);
+      if (!box.checked && index !== -1) order.splice(index, 1);
+      render();
+    });
+  });
+  function render() {
+    orderInput.value = JSON.stringify(order);
+    orderList.replaceChildren();
+    count.textContent = `${order.length} geselecteerd`;
+    smallFieldNote.hidden = order.length !== 4 && order.length !== 5;
+    const matchCount = matchCountInput.value || "5";
+    smallFieldNote.textContent = order.length === 4
+      ? `Met 4 spelers zijn herhaalde tegenstanders nodig om iedereen ${matchCount} wedstrijden te geven.`
+      : order.length === 5
+        ? `Met 5 spelers rouleert de stroman; iedereen speelt ${matchCount} wedstrijden.`
+        : "";
+    if (order.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "muted";
+      empty.textContent = "Vink spelers aan om hun volgorde te bepalen.";
+      orderList.append(empty);
+      return;
+    }
+    order.forEach((id, index) => {
+      const checkbox = checkboxes.find(box => box.value === id);
+      checkbox.closest("label").querySelector(".draw-number").textContent = `${index + 1}`;
+      const item = document.createElement("li");
+      item.textContent = `${index + 1}. ${names.get(id)}`;
+      orderList.append(item);
+    });
+    checkboxes.filter(box => !order.includes(box.value)).forEach(box => {
+      box.closest("label").querySelector(".draw-number").textContent = "";
+    });
+  }
+  matchCountInput.addEventListener("input", render);
+  render();
+})();
+</script>
+{% endblock %}
