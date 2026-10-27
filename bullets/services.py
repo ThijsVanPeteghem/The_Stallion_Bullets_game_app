@@ -4,11 +4,26 @@ from .models import Attendance, Evening, Match, MatchPlayerStats, Player
 from .schedule import generate_schedule
 
 
-def _create_matches(evening, players):
+def _create_matches(evening, players, stroman_player=None):
+    stroman_index = (
+        next(
+            (
+                index
+                for index, player in enumerate(players)
+                if stroman_player is not None and player.id == stroman_player.id
+            ),
+            None,
+        )
+        if stroman_player is not None
+        else 0
+    )
+    if stroman_player is not None and stroman_index is None:
+        raise ValueError("De gekozen stroman moet bij deze competitieavond aanwezig zijn.")
     scheduled = generate_schedule(
         len(players),
         evening.board_count,
         evening.match_count,
+        stroman_player=stroman_index,
     )
     for item in scheduled:
         player1 = players[item["player1"]]
@@ -23,13 +38,25 @@ def _create_matches(evening, players):
             player2=player2,
             referee=referee,
         )
-        MatchPlayerStats.objects.create(match=match, player=player1)
+        MatchPlayerStats.objects.create(
+            match=match,
+            player=player1,
+            is_stroman=match.is_phantom_match,
+        )
         if player2:
             MatchPlayerStats.objects.create(match=match, player=player2)
 
 
 @transaction.atomic
-def create_evening(*, season, date, board_count, players, match_count=5):
+def create_evening(
+    *,
+    season,
+    date,
+    board_count,
+    players,
+    match_count=5,
+    stroman_player=None,
+):
     evening = Evening.objects.create(
         season=season,
         date=date,
@@ -40,7 +67,7 @@ def create_evening(*, season, date, board_count, players, match_count=5):
         Attendance.objects.create(
             evening=evening, player=player, draw_order=draw_order
         )
-    _create_matches(evening, players)
+    _create_matches(evening, players, stroman_player)
     return evening
 
 
@@ -53,8 +80,10 @@ def regenerate_evening_schedule(evening):
         Player.objects.filter(attendances__evening=evening)
         .order_by("attendances__draw_order")
     )
+    stroman_match = evening.matches.filter(player2__isnull=True).first()
+    stroman_player = stroman_match.player1 if stroman_match else None
     evening.matches.all().delete()
-    _create_matches(evening, players)
+    _create_matches(evening, players, stroman_player)
 
 
 def evening_has_results(evening):
@@ -74,7 +103,8 @@ def build_standings(players, matches, attendance=None):
             "points": 0,
             "high_finishes": 0,
             "highest_finish": None,
-            "highest_throw": None,
+            "scores_171": 0,
+            "scores_180": 0,
             "least_darts": None,
             "matches_played": 0,
             "refereed": 0,
@@ -108,10 +138,8 @@ def build_standings(players, matches, attendance=None):
                 row["highest_finish"] = max(
                     filter(None, [row["highest_finish"], max(finish_values)])
                 )
-            if stat.highest_throw:
-                row["highest_throw"] = max(
-                    filter(None, [row["highest_throw"], stat.highest_throw])
-                )
+            row["scores_171"] += stat.scores_171
+            row["scores_180"] += stat.scores_180
             darts_values = stat.least_darts_values()
             if darts_values:
                 row["least_darts"] = min(
@@ -138,6 +166,8 @@ def build_standings(players, matches, attendance=None):
                 rows[stat.player_id]["wins"] += 1
             else:
                 rows[stat.player_id]["losses"] += 1
+    for row in rows.values():
+        row["legs_balance"] = row["legs_for"] - row["legs_against"]
     return list(rows.values())
 
 
@@ -157,6 +187,11 @@ def season_standings(season):
     return sorted(
         rows,
         key=lambda row: (
-            -row["points"], -row["legs_for"], row["legs_against"], row["player"].name.casefold()
+            -row["points"],
+            row["matches_played"],
+            -row["legs_balance"],
+            -(row["highest_finish"] or 0),
+            -row["scores_180"],
+            row["player"].name.casefold(),
         ),
     )

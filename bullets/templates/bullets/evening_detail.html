@@ -20,13 +20,13 @@
     {% for match in matches %}
       <tr>
         <td>{{ match.number }}</td><td>{{ match.round_number }}</td><td>{{ match.board }}</td>
-        <td>{{ match.player1 }} <span class="muted">vs</span> {% if match.player2 %}{{ match.player2 }}{% else %}<span class="badge">Stroman</span>{% endif %}</td>
+        <td><a href="{% url 'player_detail' match.player1_id %}">{{ match.player1 }}</a>{% if match.stroman_player_id == match.player1_id %} <span class="badge">Stroman</span>{% endif %} <span class="muted">vs</span> {% if match.player2 %}<a href="{% url 'player_detail' match.player2_id %}">{{ match.player2 }}</a>{% if match.stroman_player_id == match.player2_id %} <span class="badge">Stroman</span>{% endif %}{% else %}<span class="badge">Stroman</span>{% endif %}</td>
         <td>
           {% if match.is_complete %}
             {% for stat in match.stats.all %}{% if not forloop.first %} - {% endif %}{{ stat.legs_won }}{% endfor %}
           {% else %}<span class="muted">Nog niet gespeeld</span>{% endif %}
         </td>
-        <td>{% if match.referee %}{{ match.referee }}{% else %}—{% endif %}</td>
+        <td>{% if match.referee %}<a href="{% url 'player_detail' match.referee_id %}">{{ match.referee }}</a>{% else %}—{% endif %}</td>
         <td><a href="{% url 'edit_match' match.id %}">{% if match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a></td>
       </tr>
     {% endfor %}
@@ -36,15 +36,21 @@
 </section>
 <section class="panel">
   <h2>Controle</h2>
+  <p>
+    Totaal wedstrijden: {{ schedule_audit.actual_matches }}/{{ schedule_audit.expected_matches }} ·
+    stromanwedstrijden: {{ schedule_audit.actual_stroman_matches }}/{{ schedule_audit.expected_stroman_matches }}
+    {% if schedule_audit.valid %}<span class="badge">OK</span>{% else %}<span class="error">Controle mislukt</span>{% endif %}
+  </p>
   <div class="table-wrap"><table>
-    <thead><tr><th>Lotingsnr.</th><th>Speler</th><th>Wedstrijden ingepland</th><th>Scheids</th><th>Controle</th></tr></thead>
+    <thead><tr><th>Lotingsnr.</th><th>Speler</th><th>Wedstrijden ingepland</th><th>Stromanwedstrijden</th><th>Scheids</th><th>Controle</th></tr></thead>
     <tbody>{% for row in match_audit %}
       <tr>
         <td>{{ row.attendance.draw_order }}</td>
-        <td class="player-name">{{ row.attendance.player.name }}</td>
+        <td class="player-name"><a href="{% url 'player_detail' row.attendance.player_id %}">{{ row.attendance.player.name }}</a></td>
         <td>{{ row.matches }}</td>
+        <td>{{ row.stroman_matches }}</td>
         <td>{{ row.referees }}</td>
-        <td>{% if row.matches == row.expected_matches %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>
+        <td>{% if row.matches == row.expected_matches and row.stroman_matches <= 1 %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>
       </tr>
     {% endfor %}</tbody>
   </table></div>

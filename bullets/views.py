@@ -1,6 +1,7 @@
 from collections import Counter
 
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import EveningForm, MatchResultForm, PlayerEditForm, PlayerForm, SeasonForm
@@ -12,6 +13,7 @@ from .services import (
     regenerate_evening_schedule,
     season_standings,
 )
+from .schedule import expected_match_count
 
 
 def home(request):
@@ -33,6 +35,75 @@ def players(request):
         request,
         "bullets/players.html",
         {"players": Player.objects.all(), "form": form},
+    )
+
+
+def player_detail(request, player_id):
+    player = get_object_or_404(Player, pk=player_id)
+    matches = list(
+        Match.objects.filter(Q(player1=player) | Q(player2=player))
+        .select_related("evening", "evening__season", "player1", "player2", "referee")
+        .prefetch_related("stats")
+        .order_by("-evening__date", "-number")
+    )
+    opponent_counts = Counter()
+    totals = Counter()
+    high_finish_values = []
+    least_darts_values = []
+    played_count = 0
+    match_rows = []
+    for match in matches:
+        stats = list(match.stats.all())
+        player_stats = next((stat for stat in stats if stat.player_id == player.id), None)
+        opponent = match.player2 if match.player1_id == player.id else match.player1
+        complete = match.is_complete
+        opponent_stats = next(
+            (stat for stat in stats if opponent and stat.player_id == opponent.id), None
+        )
+        if complete:
+            played_count += 1
+            if opponent:
+                opponent_counts[opponent] += 1
+        if complete and player_stats:
+            finishes = player_stats.finish_values()
+            totals["high_finishes"] += len(finishes)
+            high_finish_values.extend(finishes)
+            darts_values = player_stats.least_darts_values()
+            totals["least_darts"] += len(darts_values)
+            least_darts_values.extend(darts_values)
+            totals["scores_171"] += player_stats.scores_171
+            totals["scores_180"] += player_stats.scores_180
+        match_rows.append(
+            {
+                "match": match,
+                "opponent": opponent,
+                "stats": player_stats,
+                "is_stroman": bool(player_stats and player_stats.is_stroman),
+                "opponent_stats": opponent_stats,
+                "high_finishes": (
+                    player_stats.finish_values()
+                    if complete and player_stats
+                    else []
+                ),
+            }
+        )
+
+    return render(
+        request,
+        "bullets/player_detail.html",
+        {
+            "player": player,
+            "matches": match_rows,
+            "opponents": sorted(
+                opponent_counts.items(),
+                key=lambda item: (-item[1], item[0].name.casefold()),
+            ),
+            "played_count": played_count,
+            "refereed_count": Match.objects.filter(referee=player).count(),
+            "totals": totals,
+            "high_finish_values": high_finish_values,
+            "least_darts_values": least_darts_values,
+        },
     )
 
 
@@ -75,6 +146,7 @@ def new_evening(request):
             board_count=form.cleaned_data["board_count"],
             match_count=form.cleaned_data["match_count"],
             players=form.cleaned_data["ordered_players"],
+            stroman_player=form.cleaned_data.get("stroman_player"),
         )
         return redirect("evening_detail", evening_id=evening.id)
     return render(request, "bullets/new_evening.html", {"form": form})
@@ -89,12 +161,63 @@ def _evening_context(evening):
         evening.matches.select_related("player1", "player2", "referee")
         .prefetch_related("stats")
     )
+    for match in matches:
+        stroman_stats = [stat for stat in match.stats.all() if stat.is_stroman]
+        match.stroman_player_id = stroman_stats[0].player_id if stroman_stats else None
     standings = build_standings(players, matches, attendances)
     match_counts = Counter(
         player_id
         for match in matches
         for player_id in (match.player1_id, match.player2_id)
         if player_id is not None
+    )
+    max_points = max((row["points"] for row in standings), default=0)
+    for row in standings:
+        scheduled_count = match_counts[row["player"].id]
+        row["matches_scheduled"] = scheduled_count
+        row["points_progress"] = (
+            round(row["points"] * 100 / max_points)
+            if max_points > 0
+            else 0
+        )
+        row["matches_progress"] = (
+            round(row["matches_played"] * 100 / scheduled_count)
+            if scheduled_count > 0
+            else 0
+        )
+    stroman_match_counts = Counter(
+        stat.player_id
+        for match in matches
+        for stat in match.stats.all()
+        if stat.is_stroman
+    )
+    expected_stroman_matches = int(
+        len(players) % 2 == 1 and evening.match_count % 2 == 1
+    )
+    round_participants = {}
+    rounds_valid = True
+    for match in matches:
+        participants = {
+            player_id
+            for player_id in (match.player1_id, match.player2_id)
+            if player_id is not None
+        }
+        round_players = round_participants.setdefault(match.round_number, set())
+        if round_players & participants:
+            rounds_valid = False
+        round_players.update(participants)
+    expected_total_matches = expected_match_count(
+        len(players),
+        evening.match_count,
+    )
+    stroman_match_total = sum(stroman_match_counts.values())
+    stroman_match_is_last = (
+        not stroman_match_total
+        or any(
+            match.number == matches[-1].number
+            and any(stat.is_stroman for stat in match.stats.all())
+            for match in matches
+        )
     )
     referee_counts = Counter(
         match.referee_id for match in matches if match.referee_id is not None
@@ -105,12 +228,40 @@ def _evening_context(evening):
         "matches": matches,
         "standings": standings,
         "complete_count": sum(match.is_complete for match in matches),
+        "schedule_audit": {
+            "expected_matches": expected_total_matches,
+            "actual_matches": len(matches),
+            "expected_stroman_matches": expected_stroman_matches,
+            "actual_stroman_matches": stroman_match_total,
+            "valid": (
+                len(matches) == expected_total_matches
+                and stroman_match_total == expected_stroman_matches
+                and stroman_match_is_last
+                and all(
+                    match_counts[attendance.player_id]
+                    == (
+                        evening.match_count + 1
+                        if stroman_match_counts[attendance.player_id]
+                        and match_counts[attendance.player_id] > evening.match_count
+                        else evening.match_count
+                    )
+                    for attendance in attendances
+                )
+                and rounds_valid
+            ),
+        },
         "match_audit": [
             {
                 "attendance": attendance,
                 "matches": match_counts[attendance.player_id],
+                "stroman_matches": stroman_match_counts[attendance.player_id],
                 "referees": referee_counts[attendance.player_id],
-                "expected_matches": evening.match_count,
+                "expected_matches": (
+                    evening.match_count + 1
+                    if stroman_match_counts[attendance.player_id]
+                    and match_counts[attendance.player_id] > evening.match_count
+                    else evening.match_count
+                ),
             }
             for attendance in attendances
         ],
@@ -175,8 +326,6 @@ def edit_match(request, match_id):
                 stat.legs_won = form.cleaned_data[f"{prefix}_legs"]
                 stat.high_finishes = form.cleaned_data[f"{prefix}_high_finishes"]
                 stat.scores_180 = form.cleaned_data[f"{prefix}_180"]
-                stat.scores_177 = form.cleaned_data[f"{prefix}_177"]
-                stat.scores_174 = form.cleaned_data[f"{prefix}_174"]
                 stat.scores_171 = form.cleaned_data[f"{prefix}_171"]
                 stat.least_darts = form.cleaned_data[f"{prefix}_least_darts"]
                 stat.save()
@@ -184,7 +333,14 @@ def edit_match(request, match_id):
     return render(
         request,
         "bullets/match_edit.html",
-        {"match": match, "form": form, "evening": match.evening},
+        {
+            "match": match,
+            "form": form,
+            "evening": match.evening,
+            "stroman_player_ids": {
+                stat.player_id for stat in match.stats.all() if stat.is_stroman
+            },
+        },
     )
 
 
@@ -204,9 +360,8 @@ def print_evening(request, evening_id):
             player_rows.append({
                 "player": player if player else "Stroman",
                 "legs_won": stat.legs_won if stat else None,
+                "is_stroman": bool(stat and stat.is_stroman),
                 "scores_171": (stat.scores_171 or None) if stat else None,
-                "scores_174": (stat.scores_174 or None) if stat else None,
-                "scores_177": (stat.scores_177 or None) if stat else None,
                 "scores_180": (stat.scores_180 or None) if stat else None,
                 "high_finishes": (len(stat.finish_values()) or None) if stat else None,
                 "least_darts": stat.least_darts if stat else "",

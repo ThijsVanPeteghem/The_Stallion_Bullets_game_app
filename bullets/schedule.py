@@ -8,7 +8,11 @@ class ScheduleError(ValueError):
     pass
 
 
-def _pairings(player_count, match_count=5):
+def expected_match_count(player_count, match_count):
+    return (player_count * match_count + 1) // 2
+
+
+def _pairings(player_count, match_count=5, stroman_player=0):
     if player_count % 2:
         edges = []
         for offset in range(1, match_count // 2 + 1):
@@ -22,11 +26,15 @@ def _pairings(player_count, match_count=5):
 
         if match_count % 2:
             half = (player_count - 1) // 2
+            available_players = [
+                (stroman_player + offset) % player_count
+                for offset in range(1, player_count)
+            ]
             edges.extend(
-                (player, player + half)
-                for player in range(1, half + 1)
+                (available_players[index], available_players[index + half])
+                for index in range(half)
             )
-            edges.append((0, "stroman"))
+            edges.append((stroman_player, "stroman"))
         return edges
 
     participant_count = player_count + player_count % 2
@@ -174,9 +182,15 @@ def _pick_wave(
     raise ScheduleError("Er kon geen geldige laatste ronde met scheidsrechters worden gemaakt.")
 
 
-def _generate_schedule_once(player_count, requested_board_count, match_count, seed):
+def _generate_schedule_once(
+    player_count,
+    requested_board_count,
+    match_count,
+    seed,
+    stroman_player=0,
+):
     rng = random.Random(seed)
-    all_pairs = _pairings(player_count, match_count)
+    all_pairs = _pairings(player_count, match_count, stroman_player)
     stroman_pairs = [pair for pair in all_pairs if "stroman" in pair]
     real_pairs = [pair for pair in all_pairs if "stroman" not in pair]
 
@@ -490,13 +504,15 @@ def _rebalance_referees(matches, player_count):
     return matches
 
 
-def generate_schedule(player_count, board_count, match_count=5):
+def generate_schedule(player_count, board_count, match_count=5, stroman_player=0):
     if not 4 <= player_count <= 128:
         raise ScheduleError("Een competitieavond moet 4 tot en met 128 spelers hebben.")
     if not 2 <= board_count <= 30:
         raise ScheduleError("Kies 2 tot en met 30 dartsblokken.")
     if not 1 <= match_count <= 20:
         raise ScheduleError("Kies 1 tot en met 20 wedstrijden per speler.")
+    if not 0 <= stroman_player < player_count:
+        raise ScheduleError("De gekozen stroman moet een aanwezige speler zijn.")
 
     best_schedule = None
     best_score = None
@@ -508,6 +524,7 @@ def generate_schedule(player_count, board_count, match_count=5):
                 player_count,
                 board_count,
                 match_count,
+                stroman_player=stroman_player,
                 seed=(
                     player_count * 1009 + board_count * 9176 + match_count * 3571 + attempt * 7919
                     if player_count <= 30
@@ -518,6 +535,48 @@ def generate_schedule(player_count, board_count, match_count=5):
             continue
 
         schedule = _rebalance_referees(schedule, player_count)
+        appearances = Counter(
+            player
+            for match in schedule
+            for player in (match["player1"], match["player2"])
+            if isinstance(player, int)
+        )
+        expected_stroman_matches = int(
+            player_count % 2 == 1 and match_count % 2 == 1
+        )
+        stroman_matches = [
+            match
+            for match in schedule
+            if "stroman" in (match["player1"], match["player2"])
+        ]
+        stroman_is_last = (
+            not stroman_matches or schedule[-1] == stroman_matches[0]
+        )
+        if (
+            len(schedule) != expected_match_count(player_count, match_count)
+            or set(appearances) != set(range(player_count))
+            or set(appearances.values()) != {match_count}
+            or len(stroman_matches) != expected_stroman_matches
+            or not stroman_is_last
+            or stroman_matches
+            and stroman_matches[0]["player1"] != stroman_player
+        ):
+            continue
+        players_by_round = {}
+        rounds_valid = True
+        for match in schedule:
+            participants = {
+                player
+                for player in (match["player1"], match["player2"])
+                if isinstance(player, int)
+            }
+            round_players = players_by_round.setdefault(match["round"], set())
+            if round_players & participants:
+                rounds_valid = False
+                break
+            round_players.update(participants)
+        if not rounds_valid:
+            continue
         regular_matches = [match for match in schedule if isinstance(match["player2"], int)]
         rounds = {}
         for match in regular_matches:

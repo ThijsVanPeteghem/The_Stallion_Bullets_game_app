@@ -42,6 +42,13 @@ class EveningForm(forms.Form):
             widget=forms.CheckboxSelectMultiple,
             required=True,
         )
+        self.fields["stroman_player"] = forms.ModelChoiceField(
+            queryset=Player.objects.filter(active=True),
+            label="Speler die de stroman speelt",
+            required=False,
+            empty_label="Selecteer een speler",
+            help_text="Verplicht bij een oneven aantal spelers en wedstrijden per speler.",
+        )
         self.fields["draw_order"] = forms.CharField(widget=forms.HiddenInput)
 
     season = forms.ModelChoiceField(queryset=Season.objects.all(), label="Seizoen")
@@ -89,6 +96,27 @@ class EveningForm(forms.Form):
             self.add_error("draw_order", "De lotingsvolgorde moet alle geselecteerde spelers bevatten.")
             return cleaned_data
         cleaned_data["ordered_players"] = [players_by_id[player_id] for player_id in order]
+
+        stroman_player = cleaned_data.get("stroman_player")
+        requires_stroman = (
+            len(players) % 2 == 1
+            and cleaned_data.get("match_count", 0) % 2 == 1
+        )
+        if requires_stroman and stroman_player is None:
+            self.add_error(
+                "stroman_player",
+                "Kies de speler die de stroman speelt.",
+            )
+        elif requires_stroman and stroman_player.id not in players_by_id:
+            self.add_error(
+                "stroman_player",
+                "De stroman moet door een geselecteerde speler worden gespeeld.",
+            )
+        elif not requires_stroman and stroman_player is not None:
+            self.add_error(
+                "stroman_player",
+                "Voor deze combinatie is geen stromanwedstrijd nodig.",
+            )
         return cleaned_data
 
 
@@ -106,8 +134,6 @@ class MatchResultForm(forms.Form):
                 "legs": (stat.legs_won if stat else None),
                 "high_finishes": (stat.high_finishes if stat else ""),
                 "180": (stat.scores_180 if stat else 0),
-                "177": (stat.scores_177 if stat else 0),
-                "174": (stat.scores_174 if stat else 0),
                 "171": (stat.scores_171 if stat else 0),
                 "least_darts": (stat.least_darts if stat else ""),
             }
@@ -116,12 +142,12 @@ class MatchResultForm(forms.Form):
                 initial=values["legs"],
             )
             self.fields[f"{prefix}_high_finishes"] = forms.CharField(
-                label=f"{player} - high finishes",
+                label=f"{player} - finishes",
                 required=False,
                 initial=values["high_finishes"],
-                help_text="100+ finishes, komma-gescheiden",
+                help_text="Finishwaarden vanaf 2; alleen 100+ telt mee voor punten.",
             )
-            for score in (180, 177, 174, 171):
+            for score in (180, 171):
                 self.fields[f"{prefix}_{score}"] = forms.IntegerField(
                     label=f"{player} - {score} worpen",
                     min_value=0,
@@ -131,7 +157,7 @@ class MatchResultForm(forms.Form):
                 label=f"{player} - minste pijlen",
                 required=False,
                 initial=values["least_darts"],
-                help_text="Pijlen per leg (1-15), komma-gescheiden; bijvoorbeeld 13, 15.",
+                help_text="Pijlen per leg (1-99), komma-gescheiden; maximaal drie waarden.",
             )
 
     def clean(self):
@@ -153,8 +179,8 @@ class MatchResultForm(forms.Form):
                     except ValueError:
                         self.add_error(field, "Vul finishwaarden in, gescheiden door komma's.")
                     else:
-                        if any(value < 100 or value > 170 for value in finishes):
-                            self.add_error(field, "Een high finish moet tussen 100 en 170 liggen.")
+                        if any(value < 2 or value > 170 for value in finishes):
+                            self.add_error(field, "Een finish moet tussen 2 en 170 liggen.")
                         else:
                             cleaned_data[field] = ", ".join(
                                 str(value) for value in finishes
@@ -173,8 +199,8 @@ class MatchResultForm(forms.Form):
                 continue
             if len(darts_per_leg) > 3:
                 self.add_error(field, "Vul maximaal drie legs in.")
-            elif any(value < 1 or value > 15 for value in darts_per_leg):
-                self.add_error(field, "Een leg met bonus moet tussen 1 en 15 pijlen bevatten.")
+            elif any(value < 1 or value > 99 for value in darts_per_leg):
+                self.add_error(field, "Het aantal pijlen moet tussen 1 en 99 liggen.")
             else:
                 cleaned_data[field] = ", ".join(
                     str(value) for value in darts_per_leg

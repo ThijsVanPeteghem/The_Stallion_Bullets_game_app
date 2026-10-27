@@ -9,6 +9,6 @@
 {% include "bullets/evening_tabs.html" with active_tab="standings" %}
 <section class="panel">
   <div class="section-heading"><h2>Klassement van de avond</h2><span class="muted">Wordt bijgewerkt na het invoeren van uitslagen</span></div>
-  {% include "bullets/standings_table.html" with standings=standings %}
+  {% include "bullets/standings_table.html" with standings=standings show_progress=True %}
 </section>
 {% endblock %}

@@ -1,0 +1,49 @@
+{% extends "bullets/base.html" %}
+{% block title %}{{ player.name }} | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{% url 'players' %}">Spelers</a> · Spelersoverzicht</p>
+<div class="section-heading">
+  <div><h1>{{ player.name }}</h1><p class="muted">{% if player.active %}Actief{% else %}Inactief{% endif %} · {{ played_count }} gespeelde wedstrijden</p></div>
+  <a class="button button-secondary" href="{% url 'edit_player' player.id %}">Speler bewerken</a>
+</div>
+<section class="panel">
+  <h2>Statistieken</h2>
+  <div class="table-wrap"><table class="player-stat-table">
+    <thead><tr><th>Statistiek</th><th>Aantal</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>High finishes (100+)</td><td>{{ totals.high_finishes }}</td><td>{% if high_finish_values %}{{ high_finish_values|join:", " }}{% else %}—{% endif %}</td></tr>
+      <tr><td>Minste pijlen per leg</td><td>{{ totals.least_darts }}</td><td>{% if least_darts_values %}{{ least_darts_values|join:", " }}{% else %}—{% endif %}</td></tr>
+      <tr><td>171-worpen</td><td>{{ totals.scores_171 }}</td><td>—</td></tr>
+      <tr><td>180-worpen</td><td>{{ totals.scores_180 }}</td><td>—</td></tr>
+      <tr><td>Scheidsbeurten</td><td>{{ refereed_count }}</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section class="panel">
+  <h2>Tegenstanders</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Speler</th><th>Aantal wedstrijden</th></tr></thead>
+    <tbody>{% for opponent, count in opponents %}
+      <tr><td class="player-name"><a href="{% url 'player_detail' opponent.id %}">{{ opponent.name }}</a></td><td>{{ count }}</td></tr>
+    {% empty %}<tr><td colspan="2" class="muted">Nog geen gespeelde wedstrijden tegen andere spelers.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+<section class="panel">
+  <h2>Wedstrijden</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Datum</th><th>Seizoen</th><th>#</th><th>Ronde</th><th>Blok</th><th>Tegenstander</th><th>Uitslag</th><th>HF gegooid</th><th>Scheidsrechter</th><th></th></tr></thead>
+    <tbody>{% for row in matches %}
+      <tr>
+        <td><a href="{% url 'evening_detail' row.match.evening_id %}">{{ row.match.evening.date|date:"d/m/Y" }}</a></td>
+        <td>{{ row.match.evening.season.name }}</td>
+        <td>{{ row.match.number }}</td><td>{{ row.match.round_number }}</td><td>{{ row.match.board }}</td>
+        <td>{% if row.opponent %}<a href="{% url 'player_detail' row.opponent.id %}">{{ row.opponent.name }}</a>{% else %}Stroman{% endif %}{% if row.stats.is_stroman %} <span class="badge">Stroman</span>{% endif %}</td>
+        <td>{% if row.match.is_complete and row.stats %}{{ row.stats.legs_won }}{% if row.opponent_stats %} - {{ row.opponent_stats.legs_won }}{% endif %}{% else %}<span class="muted">Nog niet gespeeld</span>{% endif %}</td>
+        <td>{% if row.high_finishes %}{{ row.high_finishes|join:", " }}{% else %}—{% endif %}</td>
+        <td>{% if row.match.referee %}<a href="{% url 'player_detail' row.match.referee_id %}">{{ row.match.referee.name }}</a>{% else %}—{% endif %}</td>
+        <td><a href="{% url 'edit_match' row.match.id %}">{% if row.match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a></td>
+      </tr>
+    {% empty %}<tr><td colspan="10" class="muted">Deze speler heeft nog geen wedstrijden.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

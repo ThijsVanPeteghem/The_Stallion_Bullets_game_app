@@ -115,6 +115,7 @@ class Match(models.Model):
 class MatchPlayerStats(models.Model):
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="stats")
     player = models.ForeignKey(Player, on_delete=models.PROTECT, related_name="match_stats")
+    is_stroman = models.BooleanField("speelt als stroman", default=False)
     legs_won = models.PositiveSmallIntegerField(
         "legs gewonnen",
         null=True,
@@ -122,17 +123,17 @@ class MatchPlayerStats(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(3)],
     )
     high_finishes = models.CharField(
-        "high finishes (100+)",
+        "finishes",
         max_length=200,
         blank=True,
-        help_text="Vul de finishes van 100 of hoger in, gescheiden door komma's.",
+        help_text="Vul finishwaarden van 2 t/m 170 in; alleen 100+ telt mee voor punten.",
     )
     scores_180 = models.PositiveSmallIntegerField("180 worpen", default=0)
     scores_177 = models.PositiveSmallIntegerField("177 worpen", default=0)
     scores_174 = models.PositiveSmallIntegerField("174 worpen", default=0)
     scores_171 = models.PositiveSmallIntegerField("171 worpen", default=0)
     least_darts = models.CharField(
-        "minste pijlen (15 of minder)",
+        "pijlen per leg",
         max_length=20,
         blank=True,
         default="",
@@ -150,7 +151,7 @@ class MatchPlayerStats(models.Model):
             values = [int(value.strip()) for value in self.high_finishes.split(",")]
         except ValueError:
             return []
-        return [value for value in values if value >= 100]
+        return [value for value in values if 2 <= value <= 170]
 
     def least_darts_values(self):
         if not self.least_darts or not self.least_darts.strip():
@@ -159,18 +160,24 @@ class MatchPlayerStats(models.Model):
             values = [int(value.strip()) for value in self.least_darts.split(",")]
         except ValueError:
             return []
-        return [value for value in values if 1 <= value <= 15]
+        return [value for value in values if 1 <= value <= 99]
 
     @property
     def bonus_points(self):
-        return (
-            self.scores_180 + self.scores_177 + self.scores_174 + self.scores_171
-            + len(self.finish_values()) + len(self.least_darts_values())
+        finish_points = sum(
+            1 if 100 <= value <= 160 else 2 if value in {161, 164, 167, 170} else 0
+            for value in self.finish_values()
         )
+        return self.scores_180 + self.scores_171 + finish_points
 
     @property
     def points(self):
-        return (self.legs_won or 0) + self.bonus_points
+        leg_points = (
+            0
+            if self.is_stroman or self.match.is_phantom_match
+            else (self.legs_won or 0)
+        )
+        return leg_points + self.bonus_points
 
     @property
     def highest_throw(self):

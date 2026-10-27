@@ -1,15 +1,180 @@
 import json
 from collections import Counter, defaultdict
+from contextlib import closing
+from datetime import datetime
+from pathlib import Path
+import sqlite3
+from tempfile import TemporaryDirectory
 
+from django.conf import settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
+from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
-from .schedule import generate_schedule
-from .services import build_standings, create_evening
+from .schedule import expected_match_count, generate_schedule
+from .services import build_standings, create_evening, season_standings
+from .snapshots import create_database_snapshot
+
+
+class DatabaseSnapshotTests(SimpleTestCase):
+    def test_snapshot_is_consistent_timestamped_and_never_overwrites(self):
+        with TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "competition.sqlite3"
+            snapshots = root / "snapshots"
+            with closing(sqlite3.connect(source)) as connection:
+                connection.execute("CREATE TABLE sample (value TEXT NOT NULL)")
+                connection.execute("INSERT INTO sample VALUES ('snapshot data')")
+                connection.commit()
+
+            timestamp = datetime(2026, 10, 28, 0, 7, 0)
+            first = create_database_snapshot(source, snapshots, timestamp)
+            second = create_database_snapshot(source, snapshots, timestamp)
+
+            self.assertEqual(first.name, "competition_20261028_000700.sqlite3")
+            self.assertEqual(second.name, "competition_20261028_000700_02.sqlite3")
+            for snapshot in (first, second):
+                with closing(sqlite3.connect(snapshot)) as connection:
+                    self.assertEqual(
+                        connection.execute("PRAGMA integrity_check").fetchone(),
+                        ("ok",),
+                    )
+                    self.assertEqual(
+                        connection.execute("SELECT value FROM sample").fetchone(),
+                        ("snapshot data",),
+                    )
+            self.assertEqual(list(snapshots.glob("*.tmp.sqlite3")), [])
+
+    def test_snapshot_rejects_missing_database_file(self):
+        with TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            with self.assertRaises(FileNotFoundError):
+                create_database_snapshot(root / "missing.sqlite3", root / "snapshots")
 
 
 class ScheduleTests(SimpleTestCase):
+    def test_expected_total_covers_every_supported_roster_and_game_count(self):
+        for player_count in range(4, 129):
+            for match_count in range(1, 21):
+                with self.subTest(players=player_count, matches=match_count):
+                    self.assertEqual(
+                        expected_match_count(player_count, match_count),
+                        (player_count * match_count + 1) // 2,
+                    )
+
+class LegacyImportTests(TestCase):
+    source_dir = settings.BASE_DIR / "old_format_data"
+
+    def test_legacy_files_parse_with_results_and_stroman_designation(self):
+        parsed = [
+            parse_legacy_file(self.source_dir / "speeldag1__04-09-2026.txt"),
+            parse_legacy_file(self.source_dir / "speeldag2__02-10-2026.txt"),
+        ]
+
+        self.assertEqual([len(item["matches"]) for item in parsed], [63, 63])
+        self.assertEqual([item["match_count"] for item in parsed], [5, 5])
+        self.assertEqual([item["stroman"] for item in parsed], ["Mario Loman", "Tim De Neve"])
+        self.assertEqual([len(item["players"]) for item in parsed], [25, 25])
+        self.assertEqual(parsed[0]["matches"][-1]["players"][1]["scores_180"], 1)
+        self.assertEqual(parsed[0]["matches"][9]["players"][0]["high_finishes"], "74")
+        self.assertEqual(parsed[1]["matches"][6]["players"][0]["least_darts"], "15")
+
+    def test_legacy_import_creates_complete_season_history_without_duplicate_imports(self):
+        call_command(
+            "import_legacy_data",
+            "--source",
+            str(self.source_dir),
+            stdout=None,
+        )
+
+        season = Season.objects.get(name="2026-2027")
+        evenings = list(season.evenings.order_by("date"))
+        self.assertEqual([evening.date.isoformat() for evening in evenings], [
+            "2026-09-04",
+            "2026-10-02",
+        ])
+        self.assertEqual(Player.objects.count(), 31)
+        for evening in evenings:
+            self.assertEqual(evening.attendances.count(), 25)
+            self.assertEqual(evening.match_count, 5)
+            self.assertEqual(evening.matches.count(), 63)
+            self.assertEqual(evening.matches.filter(referee__isnull=False).count(), 63)
+            self.assertEqual(evening.matches.first().stats.count(), 2)
+            self.assertEqual(
+                evening.matches.filter(stats__is_stroman=True).count(),
+                1,
+            )
+            stroman_stat = MatchPlayerStats.objects.get(
+                match__evening=evening,
+                is_stroman=True,
+            )
+            self.assertEqual(stroman_stat.match.number, 63)
+            self.assertEqual(stroman_stat.legs_won, 3 if evening.date.month == 9 else 0)
+            self.assertEqual(stroman_stat.points, (
+                stroman_stat.scores_180
+                + stroman_stat.scores_171
+                + sum(
+                    1 if 100 <= value <= 160 else 2 if value in {161, 164, 167, 170} else 0
+                    for value in stroman_stat.finish_values()
+                )
+            ))
+            appearances = Counter(
+                player_id
+                for match in evening.matches.all()
+                for player_id in (match.player1_id, match.player2_id)
+            )
+            self.assertEqual(sorted(appearances.values()), [5] * 24 + [6])
+            audit_response = self.client.get(
+                reverse("evening_detail", args=[evening.id])
+            )
+            self.assertTrue(audit_response.context["schedule_audit"]["valid"])
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "import_legacy_data",
+                "--source",
+                str(self.source_dir),
+            )
+        self.assertEqual(season.evenings.count(), 2)
+
+    def test_five_game_schedule_totals_and_final_stroman_match(self):
+        expected_totals = {
+            20: 50,
+            21: 53,
+            22: 55,
+            23: 58,
+            24: 60,
+            25: 63,
+            26: 65,
+            27: 68,
+            28: 70,
+            29: 73,
+            30: 75,
+        }
+        for player_count, expected_match_count in expected_totals.items():
+            with self.subTest(players=player_count):
+                matches = generate_schedule(player_count, 6)
+                self.assertEqual(len(matches), expected_match_count)
+                stroman_matches = [
+                    match
+                    for match in matches
+                    if "stroman" in (match["player1"], match["player2"])
+                ]
+                if player_count % 2:
+                    self.assertEqual(len(stroman_matches), 1)
+                    self.assertEqual(matches[-1], stroman_matches[0])
+                else:
+                    self.assertEqual(stroman_matches, [])
+
+    def test_selected_player_gets_the_final_stroman_match(self):
+        matches = generate_schedule(15, 4, stroman_player=6)
+
+        self.assertEqual(matches[-1]["player1"], 6)
+        self.assertEqual(matches[-1]["player2"], "stroman")
+
     def test_schedule_counts_round_fill_and_referee_balance(self):
         for player_count, requested_boards in (
             (4, 2), (5, 2), (6, 4), (15, 4), (19, 4), (19, 5), (30, 6)
@@ -180,6 +345,95 @@ class CompetitionFlowTests(TestCase):
             players=self.players,
         )
 
+    def test_season_standings_use_the_requested_tie_break_order(self):
+        players_by_name = {
+            name: Player.objects.create(name=f"Tiebreak {name}")
+            for name in ("A", "B", "C", "D", "E")
+        }
+        match_data = {
+            "A": [(2, "100", 2, 2)],
+            "B": [(3, "100", 4, 0)],
+            "C": [(3, "", 2, 0), (3, "", 3, 0)],
+            "D": [(3, "120", 3, 1)],
+            "E": [(3, "120", 4, 0)],
+        }
+        for index, (name, games) in enumerate(match_data.items(), start=1):
+            player = players_by_name[name]
+            evening = Evening.objects.create(
+                season=self.season,
+                date=f"2026-11-{index:02}",
+                board_count=2,
+                match_count=len(games),
+            )
+            Attendance.objects.create(
+                evening=evening,
+                player=player,
+                draw_order=1,
+            )
+            for number, (legs, finish, scores_180, scores_171) in enumerate(
+                games, start=1
+            ):
+                match = Match.objects.create(
+                    evening=evening,
+                    number=number,
+                    round_number=number,
+                    board=1,
+                    player1=player,
+                )
+                MatchPlayerStats.objects.create(
+                    match=match,
+                    player=player,
+                    legs_won=legs,
+                    high_finishes=finish,
+                    scores_180=scores_180,
+                    scores_171=scores_171,
+                )
+
+        standings = season_standings(self.season)
+
+        self.assertEqual(
+            [row["player"].name for row in standings[:5]],
+            [
+                "Tiebreak E",
+                "Tiebreak D",
+                "Tiebreak B",
+                "Tiebreak A",
+                "Tiebreak C",
+            ],
+        )
+
+    def test_points_include_only_specified_bonus_events_and_not_stroman_legs(self):
+        regular_match = self.evening.matches.filter(player2__isnull=False).first()
+        regular_stat = MatchPlayerStats.objects.get(
+            match=regular_match,
+            player=regular_match.player1,
+        )
+        regular_stat.legs_won = 2
+        regular_stat.scores_180 = 2
+        regular_stat.scores_177 = 10
+        regular_stat.scores_174 = 10
+        regular_stat.scores_171 = 3
+        regular_stat.high_finishes = (
+            "100, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170"
+        )
+        regular_stat.least_darts = "11, 12"
+        regular_stat.save()
+        self.assertEqual(regular_stat.bonus_points, 15)
+        self.assertEqual(regular_stat.points, 17)
+
+        stroman_match = self.evening.matches.filter(player2__isnull=True).first()
+        stroman_stat = MatchPlayerStats.objects.get(
+            match=stroman_match,
+            player=stroman_match.player1,
+        )
+        stroman_stat.legs_won = 3
+        stroman_stat.scores_180 = 1
+        stroman_stat.scores_171 = 1
+        stroman_stat.high_finishes = "100, 170"
+        stroman_stat.save()
+        self.assertEqual(stroman_stat.bonus_points, 5)
+        self.assertEqual(stroman_stat.points, 5)
+
     def test_new_evening_form_creates_schedule_in_draw_order(self):
         selected_players = [self.players[number] for number in (4, 2, 8, 0)]
         excluded_player = Player.objects.create(name="Niet aanwezig")
@@ -212,6 +466,61 @@ class CompetitionFlowTests(TestCase):
             if player_id is not None
         )
         self.assertEqual(set(appearances.values()), {3})
+
+    def test_stroman_player_is_required_and_used_for_odd_evening(self):
+        selected_players = self.players[:5]
+        data = {
+            "season": self.season.id,
+            "date": "02/11/2026",
+            "board_count": "2",
+            "match_count": "5",
+            "players": [str(player.id) for player in selected_players],
+            "draw_order": json.dumps([player.id for player in selected_players]),
+        }
+
+        missing_stroman = self.client.post(reverse("new_evening"), data)
+        self.assertEqual(missing_stroman.status_code, 200)
+        self.assertContains(missing_stroman, "Kies de speler die de stroman speelt.")
+        self.assertFalse(Evening.objects.filter(date="2026-11-02").exists())
+
+        stroman = selected_players[3]
+        data["stroman_player"] = str(stroman.id)
+        response = self.client.post(reverse("new_evening"), data)
+
+        evening = Evening.objects.get(date="2026-11-02")
+        self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
+        final_match = evening.matches.order_by("-number").first()
+        self.assertTrue(final_match.is_phantom_match)
+        self.assertEqual(final_match.player1_id, stroman.id)
+        self.assertEqual(
+            evening.matches.count(),
+            13,
+        )
+        response = self.client.get(reverse("evening_detail", args=[evening.id]))
+        self.assertTrue(response.context["schedule_audit"]["valid"])
+        self.assertEqual(response.context["schedule_audit"]["expected_matches"], 13)
+        stroman_row = next(
+            row
+            for row in response.context["match_audit"]
+            if row["attendance"].player_id == stroman.id
+        )
+        self.assertEqual(stroman_row["matches"], 5)
+        self.assertEqual(stroman_row["stroman_matches"], 1)
+        self.assertFalse(
+            any(
+                stroman.id in {match.player1_id, match.player2_id}
+                for match in evening.matches.filter(
+                    round_number=final_match.round_number,
+                    player2__isnull=False,
+                )
+            )
+        )
+        response = self.client.post(
+            reverse("regenerate_schedule", args=[evening.id])
+        )
+        self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
+        final_match = evening.matches.order_by("-number").first()
+        self.assertEqual(final_match.player1_id, stroman.id)
 
     def test_evening_form_lists_active_players_as_unchecked_options(self):
         response = self.client.get(reverse("new_evening"))
@@ -252,6 +561,74 @@ class CompetitionFlowTests(TestCase):
         self.assertEqual(player.name, "Nieuwe spelersnaam")
         self.assertEqual(match.player1_id, player.id)
         self.assertEqual(match.player1.name, "Nieuwe spelersnaam")
+
+    def test_player_detail_shows_match_history_opponents_and_statistics(self):
+        player = self.players[0]
+        match = Match.objects.filter(
+            evening=self.evening, player1=player, player2__isnull=False
+        ).first()
+        result_response = self.client.post(
+            reverse("edit_match", args=[match.id]),
+            {
+                "p1_legs": "2",
+                "p1_high_finishes": "100, 120",
+                "p1_171": "1",
+                "p1_180": "4",
+                "p1_least_darts": "13, 15",
+                "p2_legs": "1",
+                "p2_high_finishes": "",
+                "p2_171": "0",
+                "p2_180": "0",
+                "p2_least_darts": "",
+            },
+        )
+        self.assertRedirects(
+            result_response, reverse("evening_detail", args=[self.evening.id])
+        )
+
+        response = self.client.get(reverse("player_detail", args=[player.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["matches"]), 5)
+        self.assertEqual(response.context["played_count"], 1)
+        self.assertEqual(response.context["opponents"], [(match.player2, 1)])
+        self.assertEqual(response.context["totals"]["high_finishes"], 2)
+        self.assertEqual(response.context["totals"]["least_darts"], 2)
+        self.assertEqual(response.context["totals"]["scores_171"], 1)
+        self.assertEqual(response.context["totals"]["scores_180"], 4)
+        self.assertNotContains(response, "174-worpen")
+        self.assertNotContains(response, "177-worpen")
+        self.assertEqual(response.context["high_finish_values"], [100, 120])
+        self.assertEqual(response.context["least_darts_values"], [13, 15])
+        match_row = next(
+            row for row in response.context["matches"] if row["match"].id == match.id
+        )
+        self.assertEqual(match_row["high_finishes"], [100, 120])
+        self.assertContains(response, reverse("edit_match", args=[match.id]))
+        self.assertContains(response, "2 - 1")
+        self.assertContains(response, "100, 120")
+        self.assertContains(response, "13, 15")
+        self.assertContains(response, "HF gegooid")
+        self.assertContains(response, "Nog niet gespeeld")
+        self.assertContains(response, "Minste pijlen per leg")
+        self.assertContains(response, "Scheidsbeurten")
+
+    def test_player_names_link_to_player_overview_from_roster_and_standings(self):
+        player = self.players[0]
+
+        roster_response = self.client.get(reverse("players"))
+        standings_response = self.client.get(
+            reverse("season_standings", args=[self.season.id])
+        )
+
+        player_url = reverse("player_detail", args=[player.id])
+        self.assertContains(roster_response, f'href="{player_url}">{player.name}</a>')
+        self.assertContains(standings_response, f'href="{player_url}">{player.name}</a>')
+        for score in (171, 180):
+            self.assertContains(standings_response, f"<th>{score}</th>")
+        self.assertNotContains(standings_response, "<th>174</th>")
+        self.assertNotContains(standings_response, "<th>177</th>")
+        self.assertNotContains(standings_response, "<progress")
 
     def test_player_edit_rejects_duplicate_name_case_insensitively(self):
         player = self.players[0]
@@ -378,19 +755,30 @@ class CompetitionFlowTests(TestCase):
         form_response = self.client.get(result_url)
         self.assertEqual(form_response.status_code, 200)
         self.assertContains(form_response, 'class="result-entry-table"')
-        self.assertContains(form_response, "HF<br>(waarden 100+)")
-        self.assertContains(form_response, "MP<br>(≤15)")
+        self.assertContains(form_response, "HF<br>(finishwaarde)")
+        self.assertContains(form_response, "MP<br>(pijlen)")
         self.assertContains(form_response, match.player1.name)
         self.assertContains(form_response, match.player2.name)
         self.assertContains(form_response, 'name="p1_legs"')
         self.assertContains(form_response, 'name="p2_legs"')
-        self.assertContains(form_response, "MP 13, 15")
+        self.assertContains(form_response, 'name="p1_171"')
+        self.assertContains(form_response, 'name="p1_180"')
+        self.assertNotContains(form_response, 'name="p1_174"')
+        self.assertNotContains(form_response, 'name="p1_177"')
+        self.assertContains(form_response, "HF 74, 120")
+        stats_before = {
+            stat.player_id: stat
+            for stat in match.stats.all()
+        }
+        stats_before[match.player1_id].scores_174 = 2
+        stats_before[match.player1_id].scores_177 = 3
+        stats_before[match.player1_id].save()
         result = {
             "p1_legs": "2", "p1_high_finishes": "100, 120",
-            "p1_180": "1", "p1_177": "0", "p1_174": "0", "p1_171": "0",
+            "p1_180": "1", "p1_171": "1",
             "p1_least_darts": "13, 15",
             "p2_legs": "1", "p2_high_finishes": "",
-            "p2_180": "0", "p2_177": "0", "p2_174": "0", "p2_171": "0",
+            "p2_180": "0", "p2_171": "0",
             "p2_least_darts": "",
         }
         response = self.client.post(result_url, result)
@@ -401,9 +789,33 @@ class CompetitionFlowTests(TestCase):
             list(self.evening.matches.select_related("player1", "player2", "referee").prefetch_related("stats")),
         )
         first_row = next(row for row in rows if row["player"].id == match.player1_id)
-        self.assertEqual(first_row["points"], 7)
+        self.assertEqual(first_row["points"], 6)
         self.assertEqual(first_row["legs_for"], 2)
         self.assertEqual(first_row["legs_against"], 1)
+        self.assertEqual(first_row["legs_balance"], 1)
+        self.assertEqual(first_row["scores_171"], 1)
+        self.assertEqual(first_row["scores_180"], 1)
+        stats_before[match.player1_id].refresh_from_db()
+        self.assertEqual(stats_before[match.player1_id].scores_174, 2)
+        self.assertEqual(stats_before[match.player1_id].scores_177, 3)
+        evening_response = self.client.get(
+            reverse("evening_detail", args=[self.evening.id])
+        )
+        current_rows = evening_response.context["standings"]
+        highest_points = max(row["points"] for row in current_rows)
+        first_current_row = next(
+            row for row in current_rows if row["player"].id == match.player1_id
+        )
+        self.assertEqual(first_current_row["points_progress"], 100)
+        self.assertEqual(
+            first_current_row["matches_progress"],
+            round(
+                first_current_row["matches_played"]
+                * 100
+                / first_current_row["matches_scheduled"]
+            ),
+        )
+        self.assertGreater(highest_points, 0)
 
         result.update({"p1_legs": "1", "p2_legs": "2"})
         self.client.post(result_url, result)
@@ -413,7 +825,7 @@ class CompetitionFlowTests(TestCase):
             list(self.evening.matches.select_related("player1", "player2", "referee").prefetch_related("stats")),
         )
         first_row = next(row for row in rows if row["player"].id == match.player1_id)
-        self.assertEqual(first_row["points"], 6)
+        self.assertEqual(first_row["points"], 5)
         self.assertEqual(first_row["legs_against"], 2)
         stat = MatchPlayerStats.objects.get(match=match, player=match.player1)
         self.assertEqual(stat.least_darts, "13, 15")
@@ -423,22 +835,22 @@ class CompetitionFlowTests(TestCase):
         match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
         result = {
             "p1_legs": "2", "p1_high_finishes": "",
-            "p1_180": "0", "p1_177": "0", "p1_174": "0", "p1_171": "0",
+            "p1_180": "0", "p1_171": "0",
             "p1_least_darts": "13,15",
             "p2_legs": "1", "p2_high_finishes": "",
-            "p2_180": "0", "p2_177": "0", "p2_174": "0", "p2_171": "0",
+            "p2_180": "0", "p2_171": "0",
             "p2_least_darts": "",
         }
         response = self.client.post(reverse("edit_match", args=[match.id]), result)
         self.assertRedirects(response, reverse("evening_detail", args=[self.evening.id]))
         stat = MatchPlayerStats.objects.get(match=match, player=match.player1)
         self.assertEqual(stat.least_darts, "13, 15")
-        self.assertEqual(stat.bonus_points, 2)
+        self.assertEqual(stat.bonus_points, 0)
 
-        result["p1_least_darts"] = "13, 16"
+        result["p1_least_darts"] = "13, 100"
         response = self.client.post(reverse("edit_match", args=[match.id]), result)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "tussen 1 en 15 pijlen")
+        self.assertContains(response, "tussen 1 en 99")
 
         result["p1_least_darts"] = "13, 14, 15, 12"
         response = self.client.post(reverse("edit_match", args=[match.id]), result)
@@ -466,6 +878,18 @@ class CompetitionFlowTests(TestCase):
         audit = response.context["match_audit"]
         self.assertEqual(len(audit), self.evening.attendances.count())
         self.assertEqual({row["matches"] for row in audit}, {5})
+        self.assertTrue(response.context["schedule_audit"]["valid"])
+        self.assertEqual(response.context["schedule_audit"]["actual_matches"], 38)
+        self.assertEqual(response.context["schedule_audit"]["expected_matches"], 38)
+        self.assertTrue(
+            all(row["matches_scheduled"] == 5 for row in response.context["standings"])
+        )
+        self.assertTrue(
+            all(row["points_progress"] == 0 for row in response.context["standings"])
+        )
+        self.assertTrue(
+            all(row["matches_progress"] == 0 for row in response.context["standings"])
+        )
         referee_counts = Counter(
             referee_id
             for referee_id in self.evening.matches.values_list(
@@ -497,6 +921,10 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(standings_response, "Klassement van de avond")
         self.assertNotContains(standings_response, "<h2>Wedstrijdschema</h2>")
         self.assertNotContains(standings_response, "<th>Scheids</th>")
+        self.assertContains(standings_response, "<progress", html=False)
+        self.assertContains(standings_response, "Legsaldo")
+        self.assertNotContains(standings_response, "<th>174</th>")
+        self.assertNotContains(standings_response, "<th>177</th>")
         self.assertContains(standings_response, 'class="active" aria-current="page">Tussenstand')
         print_response = self.client.get(reverse("print_evening", args=[self.evening.id]))
         self.assertEqual(print_response.status_code, 200)
@@ -531,4 +959,6 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "13, 15")
         self.assertContains(response, "Scheidsrechter:")
         self.assertContains(response, f"Wedstrijd: <b>{match.number}</b>", html=True)
-        self.assertContains(response, "<td>2</td><td>1</td><td>2</td><td>3</td><td>4</td><td>2</td><td>13, 15</td>", html=True)
+        self.assertContains(response, "<td>2</td><td>1</td><td>4</td><td>2</td><td>13, 15</td>", html=True)
+        self.assertNotContains(response, "<th>174</th>")
+        self.assertNotContains(response, "<th>177</th>")

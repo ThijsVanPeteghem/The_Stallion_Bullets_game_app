@@ -16,7 +16,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Naam</th><th>Status</th><th></th></tr></thead>
     <tbody>{% for player in players %}
-      <tr><td class="player-name">{{ player.name }}</td><td>{% if player.active %}Actief{% else %}Inactief{% endif %}</td><td><a href="{% url 'edit_player' player.id %}">Bewerken</a></td></tr>
+      <tr><td class="player-name"><a href="{% url 'player_detail' player.id %}">{{ player.name }}</a></td><td>{% if player.active %}Actief{% else %}Inactief{% endif %}</td><td><a href="{% url 'edit_player' player.id %}">Bewerken</a></td></tr>
     {% empty %}<tr><td colspan="3" class="muted">Nog geen spelers toegevoegd.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>

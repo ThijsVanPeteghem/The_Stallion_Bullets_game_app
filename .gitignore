@@ -1,4 +1,4 @@
 __pycache__/
 *.py[cod]
-competitie.sqlite3
+*.sqlite3
 collected_static/

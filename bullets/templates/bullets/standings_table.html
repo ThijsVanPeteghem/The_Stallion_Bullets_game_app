@@ -1,17 +1,19 @@
 <div class="table-wrap">
 <table>
-  <thead><tr><th>#</th><th>Speler</th><th>Punten</th><th>Matchen</th><th>W-V</th><th>Legs +/−</th><th>HF</th><th>Hoogste worp</th><th>Min. pijlen</th>{% if show_referees %}<th>Scheids</th>{% endif %}</tr></thead>
+  <thead><tr><th>#</th><th>Speler</th><th>Punten</th><th>Matchen</th><th>W-V</th><th>Legs +/−</th><th>Legsaldo</th><th>HF</th><th>171</th><th>180</th><th>Min. pijlen</th>{% if show_referees %}<th>Scheids</th>{% endif %}</tr></thead>
   <tbody>
   {% for row in standings %}
     <tr>
       <td>{% if row.draw_order %}{{ row.draw_order }}{% else %}{{ forloop.counter }}{% endif %}</td>
-      <td class="player-name">{{ row.player.name }}</td>
-      <td><strong>{{ row.points }}</strong></td><td>{{ row.matches_played }}</td><td>{{ row.wins }}-{{ row.losses }}</td>
-      <td>{{ row.legs_for }}-{{ row.legs_against }}</td><td>{% if row.highest_finish %}{{ row.highest_finish }} ({{ row.high_finishes }}){% else %}—{% endif %}</td>
-      <td>{% if row.highest_throw %}{{ row.highest_throw }}{% else %}—{% endif %}</td>
+      <td class="player-name"><a href="{% url 'player_detail' row.player.id %}">{{ row.player.name }}</a></td>
+      <td><strong>{{ row.points }}</strong>{% if show_progress %}<progress class="standing-progress" max="100" value="{{ row.points_progress }}" aria-label="Punten: {{ row.points }}"></progress>{% endif %}</td>
+      <td>{{ row.matches_played }}{% if show_progress %}/{{ row.matches_scheduled }}<progress class="standing-progress" max="100" value="{{ row.matches_progress }}" aria-label="Wedstrijden: {{ row.matches_played }} van {{ row.matches_scheduled }}"></progress>{% endif %}</td>
+      <td>{{ row.wins }}-{{ row.losses }}</td>
+      <td>{{ row.legs_for }}-{{ row.legs_against }}</td><td>{{ row.legs_balance }}</td><td>{% if row.highest_finish %}{{ row.highest_finish }} ({{ row.high_finishes }}){% else %}—{% endif %}</td>
+      <td>{{ row.scores_171 }}</td><td>{{ row.scores_180 }}</td>
       <td>{% if row.least_darts %}{{ row.least_darts }}{% else %}—{% endif %}</td>{% if show_referees %}<td>{{ row.refereed }}</td>{% endif %}
     </tr>
-  {% empty %}<tr><td colspan="{% if show_referees %}10{% else %}9{% endif %}" class="muted">Nog geen spelers om te tonen.</td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="{% if show_referees %}12{% else %}11{% endif %}" class="muted">Nog geen spelers om te tonen.</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>

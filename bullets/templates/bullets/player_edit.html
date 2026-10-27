@@ -1,6 +1,7 @@
 {% extends "bullets/base.html" %}
 {% block title %}Speler bewerken | The Stallion Bullets{% endblock %}
 {% block content %}
+<p class="eyebrow"><a href="{% url 'player_detail' player.id %}">{{ player.name }}</a> · Speler bewerken</p>
 <h1>Speler bewerken</h1>
 <section class="panel narrow">
   <form method="post">{% csrf_token %}

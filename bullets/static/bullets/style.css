@@ -85,6 +85,9 @@ tbody tr:hover { background: #fdf9f8; }
 .result-entry-table td .error { display: block; max-width: 140px; font-size: 11px; white-space: normal; }
 .result-entry-help { margin: 8px 0 18px; font-size: 13px; }
 .player-name { font-weight: 650; }
+.player-stat-table { max-width: 600px; }
+.player-stat-table td:nth-child(2) { width: 120px; font-weight: 700; }
+.standing-progress { display: block; width: 90px; height: 9px; margin-top: 4px; accent-color: var(--club-red); }
 .badge { padding: 3px 7px; border-radius: 20px; background: #fff1c8; color: #72570e; font-size: 12px; }
 .match-title { font-size: 20px; font-weight: 700; }
 footer { padding: 18px; text-align: center; color: var(--muted); }
