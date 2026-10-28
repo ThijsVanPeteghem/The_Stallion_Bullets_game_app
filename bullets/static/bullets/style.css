@@ -88,6 +88,13 @@ tbody tr:hover { background: #fdf9f8; }
 .player-stat-table { max-width: 600px; }
 .player-stat-table td:nth-child(2) { width: 120px; font-weight: 700; }
 .standing-progress { display: block; width: 90px; height: 9px; margin-top: 4px; accent-color: var(--club-red); }
+.standings-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; }
+.standings-filter > div { flex: 1 1 240px; }
+.standings-filter label { margin-top: 0; }
+.standings-filter button { margin-top: 0; }
+.standings-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 16px; }
+.position-up { color: #226b36; font-weight: 700; }
+.position-down { color: #aa2830; font-weight: 700; }
 .badge { padding: 3px 7px; border-radius: 20px; background: #fff1c8; color: #72570e; font-size: 12px; }
 .match-title { font-size: 20px; font-weight: 700; }
 footer { padding: 18px; text-align: center; color: var(--muted); }

@@ -14,6 +14,8 @@
 </section>
 <section class="panel">
   <h2>Seizoenklassement</h2>
-  {% include "bullets/standings_table.html" with standings=standings show_referees=True %}
+  <p><a href="{% url 'season_standings' season.id %}">Bekijk de evolutie per speeldag</a></p>
+  <p class="muted">Positie tegenover de vorige speeldag: + gestegen, - gedaald, = gelijk gebleven, Nieuw bij eerste klassering.</p>
+  {% include "bullets/standings_table.html" with standings=standings show_referees=True show_position_change=True %}
 </section>
 {% endblock %}

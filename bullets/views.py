@@ -2,6 +2,7 @@ from collections import Counter
 
 from django.db import transaction
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import EveningForm, MatchResultForm, PlayerEditForm, PlayerForm, SeasonForm
@@ -12,6 +13,7 @@ from .services import (
     evening_has_results,
     regenerate_evening_schedule,
     season_standings,
+    sort_standings_for_ranking,
 )
 from .schedule import expected_match_count
 
@@ -24,6 +26,10 @@ def home(request):
         "bullets/home.html",
         {"seasons": seasons, "recent_evenings": recent_evenings},
     )
+
+
+def rules(request):
+    return render(request, "bullets/rules.html")
 
 
 def players(request):
@@ -376,8 +382,51 @@ def print_evening(request, evening_id):
 
 def season_standings_view(request, season_id):
     season = get_object_or_404(Season, pk=season_id)
+    evenings = list(season.evenings.order_by("date", "pk"))
+    ranking_tabs = [
+        {"key": "points", "label": "Punten"},
+        {"key": "scores_180", "label": "180 worpen"},
+        {"key": "scores_171", "label": "171 worpen"},
+        {"key": "highest_finish", "label": "Hoogste finish"},
+        {"key": "least_darts", "label": "Minste pijlen"},
+    ]
+    selected_ranking = request.GET.get("ranking", "points")
+    if selected_ranking not in {tab["key"] for tab in ranking_tabs}:
+        raise Http404("Dit klassement bestaat niet.")
+    evening_id = request.GET.get("evening")
+    selected_index = len(evenings) - 1
+    if evening_id:
+        selected_index = next(
+            (index for index, evening in enumerate(evenings) if str(evening.pk) == evening_id),
+            None,
+        )
+        if selected_index is None:
+            raise Http404("Deze speeldag bestaat niet in dit seizoen.")
+    selected_evening = evenings[selected_index] if evenings else None
+    standings = season_standings(season, selected_evening)
+    if selected_ranking != "points":
+        standings = sort_standings_for_ranking(standings, selected_ranking)
+    for tab in ranking_tabs:
+        tab["active"] = tab["key"] == selected_ranking
+    ranking_labels = {
+        tab["key"]: tab["label"] for tab in ranking_tabs
+    }
     return render(
         request,
         "bullets/season_standings.html",
-        {"season": season, "standings": season_standings(season)},
+        {
+            "season": season,
+            "standings": standings,
+            "evenings": evenings,
+            "selected_evening": selected_evening,
+            "selected_number": selected_index + 1,
+            "previous_evening": evenings[selected_index - 1] if selected_index > 0 else None,
+            "next_evening": (
+                evenings[selected_index + 1] if selected_index + 1 < len(evenings) else None
+            ),
+            "ranking_tabs": ranking_tabs,
+            "selected_ranking": selected_ranking,
+            "ranking_label": ranking_labels[selected_ranking],
+            "show_position_change": selected_ranking == "points",
+        },
     )

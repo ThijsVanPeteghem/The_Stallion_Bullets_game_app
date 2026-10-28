@@ -72,6 +72,14 @@ Zoek op de laptop het lokale IPv4-adres met `ipconfig`; open op een ander appara
 7. Vul of corrigeer een resultaat via **Invullen/Bewerken**. Punten en klassementen worden direct opnieuw berekend.
 8. Een avond zonder ingevoerde uitslagen kun je via **Schema opnieuw opmaken** opnieuw laten plannen; dit vervangt de bestaande wedstrijdrecords. Na het invoeren van een uitslag/statistiek is opnieuw opmaken geblokkeerd.
 9. Een avond verwijder je vanaf de avondpagina. De app vraagt eerst om bevestiging; daarna worden de bijbehorende wedstrijden, uitslagen en aanwezigheid verwijderd.
+10. Via **Seizoenstand** kun je het cumulatieve klassement na elke speeldag bekijken. Kies een speeldag en klik op **Toon klassement**, of blader met **Vorige speeldag** en **Volgende speeldag**. Standaard verschijnt de laatste stand. De kolom **Positie** toont de wijziging tegenover de vorige speeldag: `+1` is één plaats gestegen, `-3` drie plaatsen gedaald en `=` gelijk gebleven. Een eerste klassering krijgt **Nieuw**. Ook lopende speeldagen zijn zichtbaar; alleen voltooide wedstrijden tellen mee voor punten en statistieken.
+11. Op de seizoenstand zijn via tabbladen ook klassementen voor 180-worpen, 171-worpen, hoogste finish en minste pijlen beschikbaar. De klassementen zijn cumulatief tot en met de gekozen speeldag.
+
+Historische klassementen worden opnieuw berekend uit de huidige opgeslagen uitslagen tot en met de gekozen speeldag. Correcties aan oudere uitslagen werken dus ook door in de historie; dit zijn geen onveranderlijke archiefkopieën. Spelers verschijnen vanaf hun eerste aanwezigheid en blijven bij latere afwezigheid in het klassement. Speeldagen worden op datum gerangschikt, en bij dezelfde datum op aanmaakvolgorde.
+
+De planner gebruikt een round-robin-/rotatiegedachte, maar maakt niet exact dezelfde vaste ronde-indeling als het oude Excel-schema. De [applicatiereferentie](./APPLICATION_REFERENCE_NL.md#vergelijking-met-het-oude-excel-schema) beschrijft de verschillen en aanvullende regels.
+
+De actuele wedstrijd- en puntentelling is ook in de webapp te raadplegen via **Spelregels** in de navigatiebalk.
 
 Elk gewonnen leg is één punt, behalve voor een speler die als stroman is gemarkeerd. Een 180- of 171-worp levert één punt op. Een finish van 100–160 levert één punt op; finishes van 161, 164, 167 en 170 leveren twee punten op. Minste pijlen levert geen bonuspunten op. De stroman krijgt geen punten voor legs, maar wel voor geldige worpen en finishes. 174- en 177-worpen worden niet meer ingevoerd of getoond; eerder opgeslagen gegevens blijven behouden.
 

@@ -15,7 +15,12 @@ from django.urls import reverse
 from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
 from .schedule import expected_match_count, generate_schedule
-from .services import build_standings, create_evening, season_standings
+from .services import (
+    build_standings,
+    create_evening,
+    season_standings,
+    sort_standings_for_ranking,
+)
 from .snapshots import create_database_snapshot
 
 
@@ -331,6 +336,209 @@ class LegacyImportTests(TestCase):
                 )
 
 
+class SeasonStandingsHistoryTests(TestCase):
+    def setUp(self):
+        self.season = Season.objects.create(name="2026-2027")
+        self.players = [
+            Player.objects.create(name=name)
+            for name in ("Alice", "Bob", "Carla", "Dirk")
+        ]
+        self.first = self.add_evening("2026-09-04", self.players)
+        self.add_match(self.first, self.players[0], self.players[3], 3, 0)
+        self.add_match(self.first, self.players[1], self.players[2], 2, 1)
+        self.second = self.add_evening("2026-10-02", self.players[1:3])
+        self.add_match(self.second, self.players[1], self.players[2], 3, 0)
+        self.url = reverse("season_standings", args=[self.season.pk])
+
+    def add_evening(self, date, players, season=None):
+        evening = Evening.objects.create(
+            season=season or self.season, date=date, board_count=2
+        )
+        for number, player in enumerate(players, start=1):
+            Attendance.objects.create(
+                evening=evening, player=player, draw_order=number
+            )
+        return evening
+
+    def add_match(self, evening, player1, player2, legs1, legs2):
+        match = Match.objects.create(
+            evening=evening,
+            number=evening.matches.count() + 1,
+            round_number=1,
+            board=1,
+            player1=player1,
+            player2=player2,
+            referee=self.players[0],
+        )
+        MatchPlayerStats.objects.create(match=match, player=player1, legs_won=legs1)
+        MatchPlayerStats.objects.create(match=match, player=player2, legs_won=legs2)
+        return match
+
+    def test_latest_standings_include_absent_players_and_position_changes(self):
+        with self.assertNumQueries(4):
+            rows = season_standings(self.season)
+        self.assertEqual(
+            [row["player"].name for row in rows], ["Bob", "Alice", "Carla", "Dirk"]
+        )
+        self.assertEqual([row["points"] for row in rows], [5, 3, 1, 0])
+        self.assertEqual([row["position_change"] for row in rows], [1, -1, 0, 0])
+        response = self.client.get(self.url)
+        self.assertContains(response, "<th>Positie</th>")
+        self.assertContains(response, ">+1</span>")
+        self.assertContains(response, ">-1</span>")
+        self.assertContains(response, 'aria-label="Positie gelijk gebleven">=</span>')
+        self.assertContains(response, "Stand na speeldag 2 - 02/10/2026")
+        self.assertContains(response, f'href="?evening={self.first.pk}&amp;ranking=points"')
+        self.assertNotContains(response, "Volgende speeldag")
+        overview = self.client.get(reverse("season_detail", args=[self.season.pk]))
+        self.assertContains(overview, "<th>Positie</th>")
+        self.assertContains(overview, ">+1</span>")
+
+    def test_statistic_leaderboards_sort_by_requested_metric_and_keep_date_selection(self):
+        stats = {
+            "Alice": (2, 1, "100, 170", "12, 15"),
+            "Bob": (1, 3, "120, 164", "9, 13"),
+            "Carla": (3, 2, "167", "15"),
+            "Dirk": (0, 0, "", ""),
+        }
+        for player in self.players:
+            stat = MatchPlayerStats.objects.filter(
+                match__evening=self.first, player=player
+            ).first()
+            scores_180, scores_171, finishes, least_darts = stats[player.name]
+            stat.scores_180 = scores_180
+            stat.scores_171 = scores_171
+            stat.high_finishes = finishes
+            stat.least_darts = least_darts
+            stat.save()
+
+        base_rows = season_standings(self.season, self.first)
+        expected_orders = {
+            "scores_180": ["Carla", "Alice", "Bob", "Dirk"],
+            "scores_171": ["Bob", "Carla", "Alice", "Dirk"],
+            "highest_finish": ["Alice", "Carla", "Bob", "Dirk"],
+            "least_darts": ["Bob", "Alice", "Carla", "Dirk"],
+        }
+        for ranking, expected_names in expected_orders.items():
+            with self.subTest(ranking=ranking):
+                rows = sort_standings_for_ranking(base_rows, ranking)
+                self.assertEqual(
+                    [row["player"].name for row in rows], expected_names
+                )
+                response = self.client.get(
+                    self.url, {"evening": self.first.pk, "ranking": ranking}
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["selected_ranking"], ranking)
+                self.assertContains(response, f'href="?ranking={ranking}&amp;evening={self.first.pk}"')
+                self.assertNotContains(response, "<th>Positie</th>")
+                self.assertContains(response, expected_names[0])
+
+        with self.assertRaisesMessage(ValueError, "Onbekend extra klassement"):
+            sort_standings_for_ranking(base_rows, "unknown")
+
+    def test_invalid_leaderboard_tab_returns_404(self):
+        self.assertEqual(
+            self.client.get(self.url, {"ranking": "unknown"}).status_code, 404
+        )
+
+    def test_first_day_excludes_later_results_and_marks_everyone_new(self):
+        rows = season_standings(self.season, self.first)
+        self.assertEqual(
+            [row["player"].name for row in rows], ["Alice", "Bob", "Carla", "Dirk"]
+        )
+        self.assertEqual([row["points"] for row in rows], [3, 2, 1, 0])
+        self.assertTrue(all(row["position_change"] is None for row in rows))
+        self.assertEqual(rows[0]["refereed"], 2)
+        response = self.client.get(self.url, {"evening": self.first.pk})
+        self.assertContains(response, ">Nieuw</span>", count=4)
+        self.assertContains(response, "Stand na speeldag 1 - 04/09/2026")
+        self.assertContains(response, f'value="{self.first.pk}" selected')
+        self.assertContains(response, f'href="?evening={self.second.pk}&amp;ranking=points"')
+        self.assertNotContains(response, "Vorige speeldag")
+
+    def test_new_players_are_excluded_from_earlier_days_and_can_push_others_down(self):
+        newcomers = [Player.objects.create(name=f"Nieuw {number}") for number in range(3)]
+        third = self.add_evening("2026-11-06", newcomers + [self.players[3]])
+        for player in newcomers:
+            match = self.add_match(third, player, self.players[3], 3, 0)
+            MatchPlayerStats.objects.filter(match=match, player=player).update(scores_180=10)
+        rows = season_standings(self.season, third)
+        self.assertTrue(all(row["position_change"] is None for row in rows[:3]))
+        self.assertEqual(rows[3]["player"], self.players[1])
+        self.assertEqual(rows[3]["position_change"], -3)
+        self.assertEqual(len(season_standings(self.season, self.second)), 4)
+        response = self.client.get(self.url)
+        self.assertContains(response, ">-3</span>")
+        self.assertContains(response, ">Nieuw</span>", count=3)
+
+    def test_incomplete_days_are_selectable_and_count_only_completed_matches(self):
+        newcomer = Player.objects.create(name="Eva")
+        third = self.add_evening("2026-11-06", [newcomer, self.players[0]])
+        match = self.add_match(third, newcomer, self.players[0], 3, None)
+        MatchPlayerStats.objects.filter(match=match, player=newcomer).update(scores_180=10)
+        rows = season_standings(self.season, third)
+        self.assertEqual([row["points"] for row in rows], [5, 3, 1, 0, 0])
+        self.assertEqual([row["position_change"] for row in rows], [0, 0, 0, None, -1])
+        response = self.client.get(self.url, {"evening": third.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_evening"], third)
+        self.assertContains(response, "nog niet alle uitslagen zijn ingevuld")
+
+    def test_days_are_ordered_by_date_then_id_not_creation_order(self):
+        earlier = self.add_evening("2026-08-01", [self.players[3], self.players[0]])
+        self.add_match(earlier, self.players[3], self.players[0], 3, 0)
+        same_date = self.add_evening("2026-09-04", self.players[:2])
+        self.add_match(same_date, self.players[1], self.players[0], 3, 0)
+        first_rows = season_standings(self.season, self.first)
+        self.assertEqual(sum(row["points"] for row in first_rows), 9)
+        same_date_rows = season_standings(self.season, same_date)
+        self.assertEqual(sum(row["points"] for row in same_date_rows), 12)
+        response = self.client.get(self.url, {"evening": same_date.pk})
+        self.assertEqual(response.context["previous_evening"], self.first)
+        self.assertEqual(response.context["next_evening"], self.second)
+        self.assertEqual(response.context["selected_number"], 3)
+
+    def test_result_corrections_recalculate_historical_standings(self):
+        MatchPlayerStats.objects.filter(
+            match__evening=self.first, player=self.players[1]
+        ).update(scores_180=5)
+        first_rows = season_standings(self.season, self.first)
+        self.assertEqual(first_rows[0]["player"], self.players[1])
+        latest_rows = season_standings(self.season)
+        self.assertEqual(latest_rows[0]["points"], 10)
+        self.assertEqual(latest_rows[0]["position_change"], 0)
+
+    def test_invalid_or_foreign_day_returns_404(self):
+        other_season = Season.objects.create(name="Ander seizoen")
+        foreign = self.add_evening("2026-10-02", self.players, season=other_season)
+        match = self.add_match(foreign, self.players[3], self.players[0], 3, 0)
+        MatchPlayerStats.objects.filter(match=match, player=self.players[3]).update(scores_180=20)
+        for value in ("invalid", "-1", "999999", str(foreign.pk)):
+            with self.subTest(evening=value):
+                self.assertEqual(
+                    self.client.get(self.url, {"evening": value}).status_code, 404
+                )
+        with self.assertRaisesMessage(ValueError, "hoort niet bij dit seizoen"):
+            season_standings(self.season, foreign)
+        self.assertEqual(
+            [row["points"] for row in season_standings(self.season)], [5, 3, 1, 0]
+        )
+
+    def test_empty_season_and_empty_day_render_without_navigation_errors(self):
+        season = Season.objects.create(name="Leeg seizoen")
+        url = reverse("season_standings", args=[season.pk])
+        response = self.client.get(url)
+        self.assertContains(response, "Nog geen spelers om te tonen.")
+        self.assertContains(response, 'colspan="13"')
+        self.assertNotContains(response, 'id="standings-evening"')
+        self.assertEqual(response.context["standings"], [])
+        evening = self.add_evening("2026-11-06", [], season=season)
+        response = self.client.get(url)
+        self.assertEqual(response.context["selected_evening"], evening)
+        self.assertContains(response, "Nog geen spelers om te tonen.")
+
+
 class CompetitionFlowTests(TestCase):
     def setUp(self):
         self.season = Season.objects.create(name="2026-2027")
@@ -344,6 +552,18 @@ class CompetitionFlowTests(TestCase):
             board_count=4,
             players=self.players,
         )
+
+    def test_rules_page_is_available_from_navigation_and_explains_scoring(self):
+        response = self.client.get(reverse("rules"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<h1>Spelregels</h1>")
+        self.assertContains(response, "1 punt per gewonnen leg")
+        self.assertContains(response, "finish van 161, 164, 167 of 170")
+        self.assertContains(response, "Stroman")
+        self.assertContains(response, "Meeste punten")
+        home_response = self.client.get(reverse("home"))
+        self.assertContains(home_response, f'href="{reverse("rules")}">Spelregels</a>')
 
     def test_season_standings_use_the_requested_tie_break_order(self):
         players_by_name = {

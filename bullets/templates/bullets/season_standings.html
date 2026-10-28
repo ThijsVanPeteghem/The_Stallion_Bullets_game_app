@@ -3,5 +3,42 @@
 {% block content %}
 <p class="eyebrow"><a href="{% url 'season_detail' season.id %}">{{ season.name }}</a></p>
 <h1>Seizoenklassement</h1>
-<section class="panel">{% include "bullets/standings_table.html" with standings=standings show_referees=True %}</section>
+{% if evenings %}
+<section class="panel">
+  <form method="get" class="standings-filter">
+    <div>
+      <label for="standings-evening">Stand na speeldag</label>
+      <select id="standings-evening" name="evening">
+        {% for evening in evenings %}
+        <option value="{{ evening.id }}"{% if evening.id == selected_evening.id %} selected{% endif %}>Speeldag {{ forloop.counter }} - {{ evening.date|date:"d/m/Y" }}{% if forloop.last %} (laatste stand){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <input type="hidden" name="ranking" value="{{ selected_ranking }}">
+    <button class="button" type="submit">Toon klassement</button>
+  </form>
+  <div class="standings-navigation">
+    {% if previous_evening %}<a class="button button-secondary" href="?evening={{ previous_evening.id }}&amp;ranking={{ selected_ranking }}">Vorige speeldag</a>{% endif %}
+    {% if next_evening %}<a class="button button-secondary" href="?evening={{ next_evening.id }}&amp;ranking={{ selected_ranking }}">Volgende speeldag</a>{% endif %}
+    {% if selected_evening and not next_evening %}<a href="?ranking={{ selected_ranking }}">Laatste stand</a>{% endif %}
+  </div>
+</section>
+{% endif %}
+<section class="panel">
+  <nav class="page-tabs" aria-label="Klassement kiezen">
+    {% for tab in ranking_tabs %}
+    <a href="?ranking={{ tab.key }}{% if selected_evening %}&amp;evening={{ selected_evening.id }}{% endif %}"{% if tab.active %} class="active" aria-current="page"{% endif %}>{{ tab.label }}</a>
+    {% endfor %}
+  </nav>
+  {% if selected_evening %}
+  <h2>Stand na speeldag {{ selected_number }} - {{ selected_evening.date|date:"d/m/Y" }}</h2>
+  <p class="muted">Cumulatieve stand tot en met deze speeldag, ook als nog niet alle uitslagen zijn ingevuld.</p>
+  {% endif %}
+  {% if selected_ranking == "points" %}
+  <p class="muted">Positie: + = gestegen, - = gedaald, = = gelijk gebleven tegenover de vorige speeldag; Nieuw = eerste klassering.</p>
+  {% include "bullets/standings_table.html" with standings=standings show_referees=True show_position_change=True %}
+  {% else %}
+  {% include "bullets/stat_standings_table.html" with standings=standings selected_ranking=selected_ranking %}
+  {% endif %}
+</section>
 {% endblock %}

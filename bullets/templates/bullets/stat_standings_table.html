@@ -1,0 +1,28 @@
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Speler</th>
+      {% if selected_ranking == "scores_180" %}<th>180 worpen</th>
+      {% elif selected_ranking == "scores_171" %}<th>171 worpen</th>
+      {% elif selected_ranking == "highest_finish" %}<th>Hoogste finish</th>
+      {% else %}<th>Minste pijlen</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in standings %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td class="player-name"><a href="{% url 'player_detail' row.player.id %}">{{ row.player.name }}</a></td>
+      {% if selected_ranking == "scores_180" %}<td><strong>{{ row.scores_180 }}</strong>
+      {% elif selected_ranking == "scores_171" %}<td><strong>{{ row.scores_171 }}</strong>
+      {% elif selected_ranking == "highest_finish" %}<td><strong>{% if row.highest_finish %}{{ row.highest_finish }}{% else %}—{% endif %}</strong>
+      {% else %}<td><strong>{% if row.least_darts %}{{ row.least_darts }}{% else %}—{% endif %}</strong>{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3" class="muted">Nog geen spelers om te tonen.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>

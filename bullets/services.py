@@ -171,18 +171,76 @@ def build_standings(players, matches, attendance=None):
     return list(rows.values())
 
 
-def season_standings(season):
+def season_standings(season, through_evening=None):
+    evenings = season.evenings.order_by("date", "pk")
+    if through_evening is not None:
+        evening_ids = []
+        for evening in evenings:
+            evening_ids.append(evening.pk)
+            if evening.pk == through_evening.pk:
+                break
+        else:
+            raise ValueError("De gekozen speeldag hoort niet bij dit seizoen.")
+    else:
+        evening_ids = list(evenings.values_list("pk", flat=True))
+
     attendances = list(
-        Attendance.objects.filter(evening__season=season)
+        Attendance.objects.filter(evening_id__in=evening_ids)
         .select_related("player", "evening")
-        .order_by("evening__date", "draw_order")
+        .order_by("evening__date", "evening_id", "draw_order")
     )
-    players = list({record.player_id: record.player for record in attendances}.values())
     matches = list(
-        Match.objects.filter(evening__season=season)
+        Match.objects.filter(evening_id__in=evening_ids)
         .select_related("player1", "player2", "referee")
         .prefetch_related("stats")
     )
+    rows = _rank_season_standings(attendances, matches)
+    previous_rows = (
+        _rank_season_standings(
+            [record for record in attendances if record.evening_id != evening_ids[-1]],
+            [match for match in matches if match.evening_id != evening_ids[-1]],
+        )
+        if len(evening_ids) > 1
+        else []
+    )
+    previous_positions = {
+        row["player"].pk: position
+        for position, row in enumerate(previous_rows, start=1)
+    }
+    for position, row in enumerate(rows, start=1):
+        previous_position = previous_positions.get(row["player"].pk)
+        row["position_change"] = (
+            previous_position - position if previous_position is not None else None
+        )
+    return rows
+
+
+def sort_standings_for_ranking(rows, ranking):
+    ranking_keys = {
+        "scores_180": lambda row: (
+            row["scores_180"] == 0,
+            -row["scores_180"],
+        ),
+        "scores_171": lambda row: (
+            row["scores_171"] == 0,
+            -row["scores_171"],
+        ),
+        "highest_finish": lambda row: (
+            row["highest_finish"] is None,
+            -(row["highest_finish"] or 0),
+        ),
+        "least_darts": lambda row: (
+            row["least_darts"] is None,
+            row["least_darts"] or 0,
+        ),
+    }
+    if ranking not in ranking_keys:
+        raise ValueError(f"Onbekend extra klassement: {ranking}")
+    return sorted(rows, key=ranking_keys[ranking])
+
+
+def _rank_season_standings(attendances, matches):
+    players = list({record.player_id: record.player for record in attendances}.values())
     rows = build_standings(players, matches)
     return sorted(
         rows,

@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python manage\\.py test bullets\\.tests\\.SeasonStandingsHistoryTests bullets\\.tests\\.CompetitionFlowTests --noinput$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

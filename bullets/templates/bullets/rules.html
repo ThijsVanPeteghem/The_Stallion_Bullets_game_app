@@ -1,0 +1,66 @@
+{% extends "bullets/base.html" %}
+{% block title %}Spelregels | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow">NASLAG</p>
+<h1>Spelregels</h1>
+<p class="muted">Deze pagina beschrijft de wedstrijd- en puntentelling zoals die in The Stallion Bullets wordt toegepast. Ze is bedoeld als praktisch naslagwerk voor de competitie.</p>
+
+<section class="panel">
+  <h2>Wedstrijdformaat</h2>
+  <ul>
+    <li>Een gewone wedstrijd bestaat uit maximaal drie legs. De ingevoerde legs van beide spelers tellen samen op tot exact drie.</li>
+    <li>Een speler wint de wedstrijd zodra die meer legs heeft gewonnen dan de tegenstander: doorgaans 2-1 of 3-0.</li>
+    <li>Iedere gewonnen leg levert één punt op in het klassement.</li>
+    <li>Een uitslag telt pas mee als alle legs voor de wedstrijd zijn ingevuld. Onvolledige wedstrijden leveren nog geen punten of wedstrijdstatistieken op.</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2>Puntentelling</h2>
+  <p>Per voltooide wedstrijd krijgt een speler:</p>
+  <ul>
+    <li><strong>1 punt per gewonnen leg</strong>, behalve voor de speler die als stroman is aangeduid.</li>
+    <li><strong>1 punt per 180-worp.</strong></li>
+    <li><strong>1 punt per 171-worp.</strong></li>
+    <li><strong>1 punt per finish van 100 tot en met 160.</strong></li>
+    <li><strong>2 punten per finish van 161, 164, 167 of 170.</strong></li>
+  </ul>
+  <p>Andere finishwaarden kunnen bij de wedstrijd worden geregistreerd, maar geven volgens de huidige puntentelling geen bonuspunten. Minste pijlen levert geen punten op.</p>
+</section>
+
+<section class="panel">
+  <h2>Stroman</h2>
+  <ul>
+    <li>In een stromanwedstrijd speelt één aanwezige speler tegen de virtuele tegenstander “Stroman”.</li>
+    <li>De speler krijgt in die wedstrijd geen punten voor gewonnen legs, maar behoudt eventuele punten voor 171/180-worpen en bonuswaardige finishes.</li>
+    <li>De stromanwedstrijd telt wel mee als gespeelde wedstrijd en voor de uitslag- en legstatistieken.</li>
+    <li>In oudere geïmporteerde speeldagen kan de stroman als aanwezige speler met een markering zijn geregistreerd. Ook daar krijgt de gemarkeerde speler geen punten voor legs.</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2>Klassement en gelijke stand</h2>
+  <p>Bij een gelijke stand wordt de volgorde bepaald door deze criteria, van hoog naar laag:</p>
+  <ol>
+    <li>Meeste punten.</li>
+    <li>Minste gespeelde wedstrijden.</li>
+    <li>Hoogste legsaldo (legs voor min legs tegen).</li>
+    <li>Hoogste finish.</li>
+    <li>Meeste 180-worpen.</li>
+    <li>Naam alfabetisch, hoofdletterongevoelig.</li>
+  </ol>
+  <p>Het seizoenklassement is cumulatief. Spelers verschijnen vanaf hun eerste aanwezigheid en blijven bij latere afwezigheid in het klassement. Op de seizoenstand toont de kolom <strong>Positie</strong> de verandering ten opzichte van de vorige speeldag.</p>
+</section>
+
+<section class="panel">
+  <h2>Speelschema</h2>
+  <p>De planner gebruikt een round-robin-/rotatiegedachte om tegenstanders te variëren, maar garandeert niet exact dezelfde ronde-indeling als het oude Excel-schema. Het aantal wedstrijden per speler, beschikbare dartsblokken, rust en scheidsrechterverdeling beïnvloeden de indeling.</p>
+  <ul>
+    <li>Iedere speler krijgt het ingestelde aantal wedstrijden.</li>
+    <li>Een speler speelt maximaal één wedstrijd per ronde.</li>
+    <li>Een scheidsrechter speelt niet zelf in een wedstrijd van dezelfde ronde en wordt per ronde maximaal één keer toegewezen.</li>
+    <li>Een stromanwedstrijd is de laatste wedstrijd in de planning.</li>
+  </ul>
+  <p><a href="{% url 'home' %}">Terug naar het overzicht</a></p>
+</section>
+{% endblock %}

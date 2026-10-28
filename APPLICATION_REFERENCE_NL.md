@@ -25,6 +25,10 @@ De applicatie is bedoeld voor vertrouwd lokaal gebruik. De project-README waarsc
 
 Toont seizoenen, het aantal avonden per seizoen en maximaal acht recente avonden. Vanaf hier kan een beheerder een avond, seizoen of speler aanmaken/beheren.
 
+### Spelregels
+
+De pagina **Spelregels** is via de navigatiebalk bereikbaar en geeft deelnemers een praktisch overzicht van het wedstrijdformaat, de puntentelling, de stroman, de klassementsvolgorde en de basisregels van de planner. De inhoud is een leesbare samenvatting van het gedrag dat in de huidige applicatie is vastgelegd; bij wijzigingen aan punten of wedstrijdregels moet deze pagina worden bijgewerkt.
+
 ### Seizoenen
 
 - Een seizoen heeft een unieke naam van maximaal 80 tekens.
@@ -93,6 +97,19 @@ De afronding naar boven is nodig wanneer het product oneven is. Bij zo'n geval k
 - De planner probeert tegenstanders te variëren, maar herhaling is toegestaan en kan bij een kleine spelersgroep of veel wedstrijden voorkomen.
 - Exacte wedstrijden, bloknummers, ronden en loting zijn niet de stabiele interface. Valideer primair de invarianten hierboven, niet één willekeurige exacte planning.
 
+### Vergelijking met het oude Excel-schema
+
+De Excel-voorbeelden gebruiken een herkenbaar cyclisch round-robinpatroon: per speeldag schuiven de tegenstanders door, zodat spelers zo veel mogelijk verschillende tegenstanders krijgen. De huidige planner gebruikt een vergelijkbare basis, maar reproduceert niet de vaste Excel-tabellen of hun exacte ronde-indeling.
+
+- Bij een even aantal spelers bouwt de planner eerst round-robinrondes met de circle method op. Bij meer gevraagde wedstrijden dan unieke rondes kunnen die pairings terugkomen.
+- Bij een oneven aantal spelers bouwt de planner pairings op basis van cyclische offsets en voegt die, wanneer het aantal wedstrijden per speler oneven is, één wedstrijd tegen de virtuele stroman toe. De gekozen speler bepaalt wie die wedstrijd speelt.
+- Daarna schudt en verdeelt de planner de pairings opnieuw over speelrondes en dartsblokken. Daarbij houdt hij rekening met scheidsrechterbeschikbaarheid en -verdeling, blokroulatie en maximaal één wedstrijd per speler per ronde. Daardoor kunnen dezelfde basispairings in een andere ronde of op een ander blok terechtkomen dan in Excel.
+- Het aantal gelijktijdige wedstrijden kan lager zijn dan in Excel. Zo begrenst de app bij 10 of 11 aanwezige spelers het aantal blokken voor het schema tot maximaal 3, ook als er meer blokken zijn gevraagd. De 10-spelerslijst met vijf gelijktijdige wedstrijden per ronde is dus geen exacte verwachting voor de app.
+- De app maakt voor 10 spelers met vijf wedstrijden per speler 25 wedstrijden; voor 11 spelers zijn dat 28 wedstrijden, inclusief één stromanwedstrijd. De verdeling over rondes volgt de beschikbare blokken en scheidsrechters, niet noodzakelijk de vijf plus één rondes uit het Excel-voorbeeld.
+- De stromanwedstrijd is de laatste wedstrijd in de gegenereerde planning. Door de indeling kan die op een ronde met nog vrije capaciteit terechtkomen of een extra ronde vormen.
+
+Kort gezegd: de round-robin-/rotatiegedachte is vergelijkbaar, maar de exacte tegenstanders per ronde en het aantal wedstrijden per ronde zijn niet gegarandeerd gelijk aan het oude Excel-schema. De extra planningsregels van de app zijn leidend.
+
 ### Stroman
 
 Een nieuw gegenereerd schema gebruikt de virtuele tegenstander “Stroman”; de aanwezige speler die daarvoor wordt gekozen krijgt geen punten voor legs, maar krijgt wel punten voor 180-, 171-worpen en de geldende high finishes. De stromanwedstrijd staat als laatste in de avondplanning.
@@ -157,6 +174,18 @@ Seizoenstand bevat spelers die in ten minste één avond aanwezig waren. De sort
 6. naam hoofdletterongevoelig oplopend als laatste vaste volgorde bij volledige gelijkstand.
 
 De klassementlogica wordt geïmplementeerd in [bullets/services.py](./bullets/services.py); de kolommen worden getoond in [standings_table.html](./bullets/templates/bullets/standings_table.html).
+
+### Evolutie van het seizoenklassement
+
+- De seizoenstand opent standaard op de laatste speeldag. Een keuzelijst en vorige/volgende-links tonen de cumulatieve stand tot en met een gekozen speeldag; de keuze staat in de URL als `?evening=<id>`.
+- Speeldagen worden chronologisch geordend op datum, bij gelijke datum op oplopend database-ID (aanmaakvolgorde). Elke avond is een afzonderlijke speeldag.
+- Ook avonden met onvolledige of nog geen uitslagen zijn selecteerbaar. Alleen voltooide wedstrijden tellen voor punten en uitslagstatistieken; scheidsbeurten tellen alle geplande wedstrijden tot en met de gekozen avond.
+- Alleen spelers met een aanwezigheid tot en met de gekozen speeldag verschijnen. Eerdere deelnemers blijven ook bij afwezigheid in het cumulatieve klassement.
+- De kolom **Positie** op de seizoenstand en het seizoensoverzicht vergelijkt het rijnummer met de vorige speeldag: positief (`+1`) bij stijgen, negatief (`-3`) bij dalen, `=` bij gelijk blijven en **Nieuw** zonder eerdere klassering. De bestaande sortering en doorslaggevende criteria blijven gelden.
+- Historische standen worden uit de huidige opgeslagen gegevens berekend: latere correcties, naamwijzigingen en verwijderde avonden werken door. Het zijn geen bevroren snapshots.
+- Een onbekende speeldag of een speeldag uit een ander seizoen geeft HTTP 404.
+- De seizoenstand heeft tabbladen voor punten, 180-worpen, 171-worpen, hoogste afzonderlijke finish en minste pijlen. De gekozen speeldag blijft behouden bij het wisselen van tab.
+- De worpklassementen sorteren aantallen aflopend; hoogste finish sorteert de hoogste individuele finish aflopend; minste pijlen sorteert de laagste geldige waarde oplopend. Spelers zonder waarde voor de betreffende categorie staan onderaan. Bij gelijke waarden blijft de bestaande puntenrangschikking de doorslag geven.
 
 ## 6. Gegevensmodel en verwijdergedrag
 
