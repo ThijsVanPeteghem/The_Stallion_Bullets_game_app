@@ -10,12 +10,12 @@ choice /c 12X /n /m "Kies 1 voor competitie, 2 voor sandbox, of X om te annulere
 if errorlevel 3 goto canceled
 if errorlevel 2 goto sandbox
 set "APP_MODE=Competitie"
-set "DATABASE_NAME=competitie.sqlite3"
+set "DATABASE_NAME=data\competitie.sqlite3"
 goto selected
 
 :sandbox
 set "APP_MODE=Sandbox"
-set "DATABASE_NAME=competitie-sandbox.sqlite3"
+set "DATABASE_NAME=data\competitie-sandbox.sqlite3"
 
 :selected
 where py >nul 2>&1
@@ -33,7 +33,7 @@ if errorlevel 1 (
 
 echo.
 echo Snapshot maken van %APP_MODE%...
-%PYTHON% manage.py snapshot_database --output-dir "%~dp0database_snapshots"
+%PYTHON% scripts\manage.py snapshot_database --output-dir "%~dp0database_snapshots"
 if errorlevel 1 (
     echo.
     echo Het database snapshot kon niet worden gemaakt.

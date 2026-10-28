@@ -11,10 +11,11 @@ The Stallion Bullets is een lokale Django-webapp voor het beheren van dartscompe
 | Onderdeel | Huidige werking |
 |---|---|
 | Webframework | Django 5.2 of hoger, maar lager dan 6.0 |
-| Database | SQLite, bestand `competitie.sqlite3` in de projectmap |
+| Database | SQLite, standaardbestand `data/competitie.sqlite3` |
 | Taal en tijdzone | `nl-be`, `Europe/Brussels` |
 | Gebruikersaccounts | Niet aanwezig |
 | Applicatieonderdelen | Seizoenen, spelers, competitieavonden, wedstrijdschema, uitslagen, statistieken, klassementen en printbriefjes |
+| Projectbestanden | Startcommando in `scripts/manage.py`, Python-afhankelijkheden in `config/requirements.txt`, database in `data/` en losse logo-bron in `assets/` |
 | Afhankelijkheden voor bedrijfslogica | Vooral [bullets/models.py](./bullets/models.py), [bullets/forms.py](./bullets/forms.py), [bullets/schedule.py](./bullets/schedule.py), [bullets/services.py](./bullets/services.py) en [bullets/views.py](./bullets/views.py) |
 
 De applicatie is bedoeld voor vertrouwd lokaal gebruik. De project-README waarschuwt tegen rechtstreekse publicatie op internet.
@@ -265,18 +266,18 @@ Gebruik dit als functionele acceptatiechecklist. Een pipeline moet waar mogelijk
 Project-README:
 
 ```powershell
-python -m pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+python -m pip install -r config/requirements.txt
+python scripts/manage.py migrate
+python scripts/manage.py runserver
 ```
 
 Open vervolgens `http://127.0.0.1:8000`. Bestaande functionele tests draaien met:
 
 ```powershell
-python manage.py test bullets
+python scripts/manage.py test bullets
 ```
 
-De plannings- en flowtests staan in [bullets/tests.py](./bullets/tests.py). De routekaart staat in [bullets/urls.py](./bullets/urls.py). Voor een back-up adviseert de README de app te stoppen en `competitie.sqlite3` te kopiëren; bewaar ook de projectbestanden en het clublogo.
+De plannings- en flowtests staan in [bullets/tests.py](./bullets/tests.py). De routekaart staat in [bullets/urls.py](./bullets/urls.py). Voor een back-up adviseert de README de app te stoppen en `data/competitie.sqlite3` te kopiëren; bewaar ook de projectbestanden en het logo uit `assets`.
 
 ## 10. Bronnen in de code
 

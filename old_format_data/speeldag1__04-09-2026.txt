@@ -31,7 +31,7 @@ Blok 3	Daniël De Winter	0	1
 Quinten Lagaert	3	 	 	 	 
 Schrijver	Peter Eeckhout
 W9	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
-Blok 4	Stefan Verhoje	1	 	 	 	 
+Blok 4	Stefan Verhoye	1	 	 	 	 
 Noah Crombeen	2	 	 	 	 
 Schrijver	Wim Van De Keere
 W10	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
@@ -83,7 +83,7 @@ Blok 1	Daniël De Winter	2
 Noah Crombeen	1	 	 	 	 
 Schrijver	Geert Beeckman
 W22	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
-Blok 2	Stefan Verhoje	2	 	 	 	 
+Blok 2	Stefan Verhoye	2	 	 	 	 
 Thijs Van Peteghem	1	 	 	 	 
 Schrijver	Guy Schepens
 W23	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
@@ -105,7 +105,7 @@ Schrijver	Daniël De Winter
 W27	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
 Blok 2	Mario Loman	2	 	 	 	 
 Peter Eeckhout	1	 	 	 	 
-Schrijver	Stefan Verhoje
+Schrijver	Stefan Verhoye
 W28	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
 Blok 3	Dirk De Moor	1	 	 	 	 
 Wim Van De Keere	2	 	 	 	15
@@ -135,7 +135,7 @@ Blok 4	Daniël De Winter	2
 Thijs Van Peteghem	1	 	 	 	 
 Schrijver	Patrick Monie
 W35	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
-Blok 5	Stefan Verhoje	0	 	 	 	 
+Blok 5	Stefan Verhoye	0	 	 	 	 
 Jhonny Verdonck	3	 	 	 	 
 Schrijver	Bart De Graeve
 W36	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
@@ -187,7 +187,7 @@ Blok 2	Daniël De Winter	0
 Jhonny Verdonck	3	 	 	 	 
 Schrijver	Geert Beeckman
 W48	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
-Blok 3	Stefan Verhoje	0	 	 	 	 
+Blok 3	Stefan Verhoye	0	 	 	 	 
 Nico Lauwers	3	 	 	 	 
 Schrijver	Guy Schepens
 W49	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
@@ -209,7 +209,7 @@ Schrijver	Daniël De Winter
 W53	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
 Blok 3	Mario Loman	2	 	 	 	 
 Patrick Monie	1	 	 	 	 
-Schrijver	Stefan Verhoje
+Schrijver	Stefan Verhoye
 W54	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
 Blok 4	Dirk De Moor	1	 	 	 	 
 Bart De Graeve	2	 	 	 	 
@@ -239,7 +239,7 @@ Blok 5	Daniël De Winter	0
 Nico Lauwers	3	 	 	 	 
 Schrijver	Tony Vanhove
 W61	RONDE 6	3 legs 501	Uitslag	180	171	HF	MP
-Blok 1	Stefan Verhoje	0	 	 	 	 
+Blok 1	Stefan Verhoye	0	 	 	 	 
 David Van de Mergel	3	1	 	 	 
 Schrijver	Quinten Lagaert
 W62	RONDE 6	3 legs 501	Uitslag	180	171	HF	MP

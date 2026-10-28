@@ -88,6 +88,10 @@ tbody tr:hover { background: #fdf9f8; }
 .player-stat-table { max-width: 600px; }
 .player-stat-table td:nth-child(2) { width: 120px; font-weight: 700; }
 .standing-progress { display: block; width: 90px; height: 9px; margin-top: 4px; accent-color: var(--club-red); }
+.standing-progress-cell { display: inline-flex; align-items: center; gap: 7px; }
+.standing-progress-cell .standing-progress { width: 72px; height: 7px; margin: 0; }
+.evening-standing-table th, .evening-standing-table td { padding: 6px 7px; }
+.evening-standing-table tbody tr { height: 40px; }
 .standings-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; }
 .standings-filter > div { flex: 1 1 240px; }
 .standings-filter label { margin-top: 0; }

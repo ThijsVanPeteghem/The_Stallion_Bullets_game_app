@@ -1,15 +1,17 @@
 # The Stallion Bullets
 
-Lokale webapp voor het beheren van de dartscompetitie. De applicatie gebruikt Django en bewaart de gegevens standaard in het SQLite-bestand `competitie.sqlite3` in deze projectmap. Met de omgevingsvariabele `DATABASE_NAME` kun je een andere database kiezen.
+Lokale webapp voor het beheren van de dartscompetitie. De applicatie gebruikt Django en bewaart de gegevens standaard in `data\competitie.sqlite3`. Met de omgevingsvariabele `DATABASE_NAME` kun je een andere database kiezen.
 
 ## Opstarten op Windows
 
 Dubbelklik in de projectmap op een van deze bestanden:
 
-- **Start sandbox.bat**: opent de sandbox met een aparte database (`competitie-sandbox.sqlite3`). Gegevens hierin veranderen de echte competitie niet.
-- **Start competitie.bat**: opent de competitie met de bestaande database (`competitie.sqlite3`).
+- **Start sandbox.bat**: opent de sandbox met een aparte database (`data\competitie-sandbox.sqlite3`). Gegevens hierin veranderen de echte competitie niet.
+- **Start competitie.bat**: opent de competitie met de bestaande database (`data\competitie.sqlite3`).
 - **Database archiveren.bat**: maakt met één dubbelklik een datum/tijd-snapshot van de competitie- of sandboxdatabase in `database_snapshots`. Je kunt de app hiervoor open laten.
-- **Database verwijderen.bat**: verwijdert na expliciete bevestiging de gekozen competitie- of sandboxdatabase. Stop de app eerst; verwijderen is definitief.
+- **scripts\Database verwijderen.bat**: verwijdert na expliciete bevestiging de gekozen competitie- of sandboxdatabase. Stop de app eerst; verwijderen is definitief.
+
+De twee startbestanden en **Database archiveren.bat** staan direct in de projectmap. Technische hulpmiddelen staan in `scripts`, afhankelijkheden in `config`, de databasebestanden in `data` en het losse logo in `assets`. De webapp gebruikt de eigen statische logokopie in `bullets\static\bullets`.
 
 Bij de eerste start installeert het script zo nodig de benodigde Python-onderdelen. Daarna wordt de database bijgewerkt en opent de applicatie vanzelf in de browser. Laat het zwarte venster open zolang je de applicatie gebruikt; sluit de app met `Ctrl+C` in dat venster. Start niet beide tegelijk, want ze gebruiken hetzelfde webadres.
 
@@ -18,9 +20,9 @@ De scripts verwachten Python 3. Als Python nog niet is geïnstalleerd, installee
 Je kunt de applicatie ook handmatig starten vanuit PowerShell in deze map:
 
 ```powershell
-python -m pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+python -m pip install -r config\requirements.txt
+python scripts\manage.py migrate
+python scripts\manage.py runserver
 ```
 
 Open daarna <http://127.0.0.1:8000>.
@@ -32,12 +34,12 @@ Kies per PowerShell-venster de database voordat je Django-commando's uitvoert. E
 Gebruik bijvoorbeeld een aparte database om te testen:
 
 ```powershell
-$env:DATABASE_NAME = "competitie-test.sqlite3"
-python manage.py migrate
-python manage.py runserver
+$env:DATABASE_NAME = "data\competitie-test.sqlite3"
+python scripts\manage.py migrate
+python scripts\manage.py runserver
 ```
 
-In datzelfde PowerShell-venster gebruiken ook andere Django-commando's, zoals `createsuperuser` en `migrate`, deze testdatabase. De app maakt het databasebestand aan wanneer dat nodig is. Sluit het venster of voer dit uit om terug te keren naar de standaarddatabase `competitie.sqlite3`:
+In datzelfde PowerShell-venster gebruiken ook andere Django-commando's, zoals `createsuperuser` en `migrate`, deze testdatabase. De app maakt het databasebestand aan wanneer dat nodig is. Sluit het venster of voer dit uit om terug te keren naar de standaarddatabase `data\competitie.sqlite3`:
 
 ```powershell
 Remove-Item Env:DATABASE_NAME
@@ -47,16 +49,16 @@ Je kunt meerdere testdatabases maken met verschillende namen, bijvoorbeeld `comp
 
 ```powershell
 $env:DATABASE_NAME = "C:\data\competitie-productie.sqlite3"
-python manage.py migrate
-python manage.py runserver
+python scripts\manage.py migrate
+python scripts\manage.py runserver
 ```
 
-Voer `migrate` voor elke database uit die je gebruikt. Django's automatische test-runner maakt voor `python manage.py test` een aparte, tijdelijke testdatabase aan op basis van de gekozen instellingen. Gebruik geen productiegegevens in een testkopie zonder die eerst te anonimiseren.
+Voer `migrate` voor elke database uit die je gebruikt. Django's automatische test-runner maakt voor `python scripts\manage.py test` een aparte, tijdelijke testdatabase aan op basis van de gekozen instellingen. Gebruik geen productiegegevens in een testkopie zonder die eerst te anonimiseren.
 
 Om de app bereikbaar te maken op apparaten op hetzelfde wifi-netwerk:
 
 ```powershell
-python manage.py runserver 0.0.0.0:8000
+python scripts\manage.py runserver 0.0.0.0:8000
 ```
 
 Zoek op de laptop het lokale IPv4-adres met `ipconfig`; open op een ander apparaat `http://<lokaal-ip-adres>:8000`. Sta Python eventueel toe in Windows Firewall voor het privé-netwerk. Deze eerste versie heeft geen gebruikersaccounts en is bedoeld voor een vertrouwd lokaal netwerk, niet voor rechtstreekse publicatie op het internet.
@@ -83,25 +85,25 @@ De actuele wedstrijd- en puntentelling is ook in de webapp te raadplegen via **S
 
 Elk gewonnen leg is één punt, behalve voor een speler die als stroman is gemarkeerd. Een 180- of 171-worp levert één punt op. Een finish van 100–160 levert één punt op; finishes van 161, 164, 167 en 170 leveren twee punten op. Minste pijlen levert geen bonuspunten op. De stroman krijgt geen punten voor legs, maar wel voor geldige worpen en finishes. 174- en 177-worpen worden niet meer ingevoerd of getoond; eerder opgeslagen gegevens blijven behouden.
 
-Maak een back-up door de app te stoppen en `competitie.sqlite3` te kopiëren. Bewaar ook de projectbestanden en het clublogo.
+Maak een back-up door de app te stoppen en `data\competitie.sqlite3` te kopiëren. Bewaar ook de projectbestanden en het clublogo uit `assets`.
 
 Voor terug te vinden tijdsnapshots dubbelklik je op **Database archiveren.bat** en kies je competitie of sandbox. Een snapshot wordt onder `database_snapshots` bewaard met database- en tijdstempel in de bestandsnaam. Het script gebruikt SQLite's online-back-upfunctie, controleert de integriteit en overschrijft bestaande snapshots niet. Snapshots worden niet automatisch verwijderd; bewaar periodiek ook een kopie buiten deze computer.
 
-Om een database opnieuw te beginnen, stop je de app, start je **Database verwijderen.bat**, kies je de competitie- of sandboxdatabase en typ je `DELETE`. Bij de volgende start maakt Django een lege database aan en voert het de migraties uit.
+Om een database opnieuw te beginnen, stop je de app, start je **scripts\Database verwijderen.bat**, kies je de competitie- of sandboxdatabase en typ je `DELETE`. Bij de volgende start maakt Django een lege database aan en voert het de migraties uit.
 
 ### Oude speeldagen importeren
 
 De twee tekstbestanden in `old_format_data` kunnen na het migreren van de database met dit commando worden geïmporteerd. Controleer eerst de bronbestanden zonder iets op te slaan:
 
 ```powershell
-python manage.py migrate
-python manage.py import_legacy_data --dry-run
+python scripts\manage.py migrate
+python scripts\manage.py import_legacy_data --dry-run
 ```
 
 Voer de import daarna uit in de gekozen database:
 
 ```powershell
-python manage.py import_legacy_data
+python scripts\manage.py import_legacy_data
 ```
 
 De import maakt seizoen `2026-2027`, spelers, aanwezigheden, wedstrijdschema's, schrijvers, uitslagen en statistieken aan. De stromanmarkering wordt overgenomen; legs van die speler leveren geen punten op, de geregistreerde worpen en finishes blijven meetellen. De import stopt als een speeldag met dezelfde datum al bestaat. Bronbestanden worden niet aangepast.
@@ -109,11 +111,11 @@ De import maakt seizoen `2026-2027`, spelers, aanwezigheden, wedstrijdschema's, 
 Bij een bekende schrijfvariant kan een expliciete naamkoppeling worden meegegeven, bijvoorbeeld:
 
 ```powershell
-python manage.py import_legacy_data --alias "Oude naam=Juiste naam"
+python scripts\manage.py import_legacy_data --alias "Oude naam=Juiste naam"
 ```
 
 ## Tests
 
 ```powershell
-python manage.py test bullets
+python scripts\manage.py test bullets
 ```

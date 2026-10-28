@@ -1,5 +1,5 @@
 <div class="table-wrap">
-<table>
+<table{% if show_progress %} class="evening-standing-table"{% endif %}>
   <thead><tr><th>#</th><th>Speler</th>{% if show_position_change %}<th>Positie</th>{% endif %}<th>Punten</th><th>Matchen</th><th>W-V</th><th>Legs +/−</th><th>Legsaldo</th><th>HF</th><th>171</th><th>180</th><th>Min. pijlen</th>{% if show_referees %}<th>Scheids</th>{% endif %}</tr></thead>
   <tbody>
   {% for row in standings %}
@@ -9,8 +9,8 @@
       {% if show_position_change %}
       <td>{% if row.position_change == None %}<span class="muted">Nieuw</span>{% elif row.position_change > 0 %}<span class="position-up" aria-label="{{ row.position_change }} plaatsen gestegen">+{{ row.position_change }}</span>{% elif row.position_change < 0 %}<span class="position-down" aria-label="Positiewijziging: {{ row.position_change }} plaatsen">{{ row.position_change }}</span>{% else %}<span class="muted" aria-label="Positie gelijk gebleven">=</span>{% endif %}</td>
       {% endif %}
-      <td><strong>{{ row.points }}</strong>{% if show_progress %}<progress class="standing-progress" max="100" value="{{ row.points_progress }}" aria-label="Punten: {{ row.points }}"></progress>{% endif %}</td>
-      <td>{{ row.matches_played }}{% if show_progress %}/{{ row.matches_scheduled }}<progress class="standing-progress" max="100" value="{{ row.matches_progress }}" aria-label="Wedstrijden: {{ row.matches_played }} van {{ row.matches_scheduled }}"></progress>{% endif %}</td>
+      <td>{% if show_progress %}<span class="standing-progress-cell"><strong>{{ row.points }}</strong><progress class="standing-progress" max="100" value="{{ row.points_progress }}" aria-label="Punten: {{ row.points }}"></progress></span>{% else %}<strong>{{ row.points }}</strong>{% endif %}</td>
+      <td>{% if show_progress %}<span class="standing-progress-cell">{{ row.matches_played }}/{{ row.matches_scheduled }}<progress class="standing-progress" max="100" value="{{ row.matches_progress }}" aria-label="Wedstrijden: {{ row.matches_played }} van {{ row.matches_scheduled }}"></progress></span>{% else %}{{ row.matches_played }}{% endif %}</td>
       <td>{{ row.wins }}-{{ row.losses }}</td>
       <td>{{ row.legs_for }}-{{ row.legs_against }}</td><td>{{ row.legs_balance }}</td><td>{% if row.highest_finish %}{{ row.highest_finish }} ({{ row.high_finishes }}){% else %}—{% endif %}</td>
       <td>{{ row.scores_171 }}</td><td>{{ row.scores_180 }}</td>

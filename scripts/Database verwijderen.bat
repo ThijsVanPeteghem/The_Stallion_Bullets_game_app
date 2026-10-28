@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 title The Stallion Bullets - Database verwijderen
 
 echo WAARSCHUWING: de gekozen database en alle competitiegegevens worden permanent verwijderd.
@@ -9,14 +9,14 @@ echo.
 choice /c 12X /n /m "Kies 1 voor competitie, 2 voor sandbox, of X om te annuleren: "
 if errorlevel 3 goto canceled
 if errorlevel 2 goto sandbox
-set "DATABASE_FILE=competitie.sqlite3"
+set "DATABASE_FILE=data\competitie.sqlite3"
 goto selected
 
 :sandbox
-set "DATABASE_FILE=competitie-sandbox.sqlite3"
+set "DATABASE_FILE=data\competitie-sandbox.sqlite3"
 
 :selected
-set "DATABASE_PATH=%~dp0%DATABASE_FILE%"
+set "DATABASE_PATH=%CD%\%DATABASE_FILE%"
 if not exist "%DATABASE_PATH%" (
     echo.
     echo Databasebestand niet gevonden: %DATABASE_FILE%

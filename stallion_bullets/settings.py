@@ -29,7 +29,7 @@ TEMPLATES = [
 ]
 WSGI_APPLICATION = "stallion_bullets.wsgi.application"
 
-database_name = os.environ.get("DATABASE_NAME", "competitie.sqlite3")
+database_name = os.environ.get("DATABASE_NAME", "data/competitie.sqlite3")
 if not database_name.strip():
     raise ValueError("DATABASE_NAME mag niet leeg zijn.")
 
