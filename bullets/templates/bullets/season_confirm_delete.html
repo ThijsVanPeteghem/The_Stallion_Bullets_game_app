@@ -1,0 +1,14 @@
+{% extends "bullets/base.html" %}
+{% block title %}Competitie verwijderen | The Stallion Bullets{% endblock %}
+{% block content %}
+<h1>Competitie verwijderen</h1>
+<section class="panel narrow">
+  <p>Weet je zeker dat je competitie <strong>{{ season.name }}</strong> wilt verwijderen?</p>
+  <p>Alle avonden, wedstrijden en uitslagen worden verwijderd, evenals de bijbehorende statistieken en aanwezigheden. De {{ evening_count }} avonden en {{ match_count }} wedstrijden kunnen niet worden teruggezet. Spelers blijven behouden.</p>
+  <form method="post" class="actions">
+    {% csrf_token %}
+    <button class="button button-danger" type="submit">Ja, verwijder deze competitie</button>
+    <a class="button button-secondary" href="{% url 'season_detail' season.id %}">Annuleren</a>
+  </form>
+</section>
+{% endblock %}

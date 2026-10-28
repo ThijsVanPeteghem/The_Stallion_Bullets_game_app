@@ -991,6 +991,28 @@ class CompetitionFlowTests(TestCase):
         self.assertFalse(Attendance.objects.filter(evening_id=self.evening.id).exists())
         self.assertTrue(Season.objects.filter(pk=self.season.id).exists())
 
+    def test_season_can_be_deleted_with_competition_data_but_players_remain(self):
+        season_id = self.season.id
+        evening_id = self.evening.id
+        match_ids = list(self.evening.matches.values_list("id", flat=True))
+        player_ids = [player.id for player in self.players]
+        delete_url = reverse("delete_season", args=[season_id])
+
+        confirm = self.client.get(delete_url)
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, "Alle avonden, wedstrijden en uitslagen")
+        self.assertTrue(Season.objects.filter(pk=season_id).exists())
+
+        response = self.client.post(delete_url)
+
+        self.assertRedirects(response, reverse("seasons"))
+        self.assertFalse(Season.objects.filter(pk=season_id).exists())
+        self.assertFalse(Evening.objects.filter(pk=evening_id).exists())
+        self.assertFalse(Match.objects.filter(pk__in=match_ids).exists())
+        self.assertFalse(MatchPlayerStats.objects.filter(match_id__in=match_ids).exists())
+        self.assertFalse(Attendance.objects.filter(evening_id=evening_id).exists())
+        self.assertEqual(Player.objects.filter(pk__in=player_ids).count(), len(player_ids))
+
     def test_results_can_be_entered_corrected_and_reflected_in_standings(self):
         match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
         result_url = reverse("edit_match", args=[match.id])

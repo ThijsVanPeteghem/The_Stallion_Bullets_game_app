@@ -143,6 +143,22 @@ def season_detail(request, season_id):
     )
 
 
+def delete_season(request, season_id):
+    season = get_object_or_404(Season, pk=season_id)
+    if request.method == "POST":
+        season.delete()
+        return redirect("seasons")
+    return render(
+        request,
+        "bullets/season_confirm_delete.html",
+        {
+            "season": season,
+            "evening_count": season.evenings.count(),
+            "match_count": Match.objects.filter(evening__season=season).count(),
+        },
+    )
+
+
 def new_evening(request):
     form = EveningForm(request.POST or None)
     if request.method == "POST" and form.is_valid():

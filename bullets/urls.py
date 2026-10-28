@@ -10,6 +10,7 @@ urlpatterns = [
     path("spelers/<int:player_id>/bewerken/", views.edit_player, name="edit_player"),
     path("seizoenen/", views.seasons, name="seasons"),
     path("seizoenen/<int:season_id>/", views.season_detail, name="season_detail"),
+    path("seizoenen/<int:season_id>/verwijderen/", views.delete_season, name="delete_season"),
     path("seizoenen/<int:season_id>/stand/", views.season_standings_view, name="season_standings"),
     path("avonden/nieuw/", views.new_evening, name="new_evening"),
     path("avonden/<int:evening_id>/", views.evening_detail, name="evening_detail"),
