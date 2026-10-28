@@ -34,6 +34,7 @@
         {% for error in form.stroman_player.errors %}<span class="error">{{ error }}</span>{% endfor %}
       </div>
     </div>
+    <p id="board-capacity-note" class="small-field-note" aria-live="polite">Voor 4 blokken zijn minimaal 12 deelnemers nodig.</p>
     <div class="section-heading selection-heading">
       <div><h2>Aanwezige spelers</h2><p class="muted">Vink spelers aan in de gelote volgorde (4–128).</p></div>
       <span id="selection-count" class="badge">0 geselecteerd</span>
@@ -61,6 +62,8 @@
   const orderList = document.getElementById("draw-order-list");
   const count = document.getElementById("selection-count");
   const smallFieldNote = document.getElementById("small-field-note");
+  const boardCapacityNote = document.getElementById("board-capacity-note");
+  const boardCountInput = document.getElementById("id_board_count");
   const matchCountInput = document.getElementById("id_match_count");
   const stromanInput = document.getElementById("id_stroman_player");
   const names = new Map(checkboxes.map(box => [box.value, box.closest("label").textContent.trim()]));
@@ -87,6 +90,16 @@
     orderInput.value = JSON.stringify(order);
     orderList.replaceChildren();
     count.textContent = `${order.length} geselecteerd`;
+    const boardCount = Number(boardCountInput.value);
+    if (boardCount >= 2 && boardCount <= 30) {
+      const minimumPlayers = boardCount * 3;
+      const maximumAvailableBoards = Math.floor(order.length / 3);
+      boardCapacityNote.textContent = order.length < minimumPlayers
+        ? `Voor ${boardCount} blokken zijn minimaal ${minimumPlayers} deelnemers nodig. Met ${order.length} geselecteerde deelnemers kunnen maximaal ${maximumAvailableBoards} blokken tegelijk worden gevuld.`
+        : `Voor ${boardCount} blokken zijn minimaal ${minimumPlayers} deelnemers nodig.`;
+    } else {
+      boardCapacityNote.textContent = "";
+    }
     const matchCount = matchCountInput.value || "5";
     const needsStroman = order.length % 2 === 1 && Number(matchCount) % 2 === 1;
     stromanInput.required = needsStroman;
@@ -117,6 +130,7 @@
       box.closest("label").querySelector(".draw-number").textContent = "";
     });
   }
+  boardCountInput.addEventListener("input", render);
   matchCountInput.addEventListener("input", render);
   render();
 })();

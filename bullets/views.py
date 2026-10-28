@@ -15,7 +15,7 @@ from .services import (
     season_standings,
     sort_standings_for_ranking,
 )
-from .schedule import expected_match_count
+from .schedule import ScheduleError, expected_match_count
 
 
 def home(request):
@@ -146,14 +146,23 @@ def season_detail(request, season_id):
 def new_evening(request):
     form = EveningForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        evening = create_evening(
-            season=form.cleaned_data["season"],
-            date=form.cleaned_data["date"],
-            board_count=form.cleaned_data["board_count"],
-            match_count=form.cleaned_data["match_count"],
-            players=form.cleaned_data["ordered_players"],
-            stroman_player=form.cleaned_data.get("stroman_player"),
-        )
+        try:
+            evening = create_evening(
+                season=form.cleaned_data["season"],
+                date=form.cleaned_data["date"],
+                board_count=form.cleaned_data["board_count"],
+                match_count=form.cleaned_data["match_count"],
+                players=form.cleaned_data["ordered_players"],
+                stroman_player=form.cleaned_data.get("stroman_player"),
+            )
+        except ScheduleError:
+            form.add_error(
+                None,
+                "Met deze combinatie van spelers, dartsblokken en wedstrijden per speler "
+                "kan geen geldig schema worden gemaakt. Probeer minder dartsblokken "
+                "of wijzig het aantal wedstrijden per speler.",
+            )
+            return render(request, "bullets/new_evening.html", {"form": form})
         return redirect("evening_detail", evening_id=evening.id)
     return render(request, "bullets/new_evening.html", {"form": form})
 

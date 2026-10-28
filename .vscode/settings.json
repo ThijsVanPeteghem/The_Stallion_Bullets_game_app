@@ -3,6 +3,14 @@
         "/^python manage\\.py test bullets\\.tests\\.SeasonStandingsHistoryTests bullets\\.tests\\.CompetitionFlowTests --noinput$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python -c \"from bullets\\.schedule import generate_schedule; print\\(len\\(generate_schedule\\(16, 4, 5\\)\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python scripts/manage\\.py test bullets\\.tests\\.CompetitionFlowTests\\.test_new_evening_reports_unavailable_schedule_without_creating_evening$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

@@ -687,6 +687,26 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertEqual(set(appearances.values()), {3})
 
+    def test_new_evening_reports_unavailable_schedule_without_creating_evening(self):
+        selected_players = [*self.players, Player.objects.create(name="Speler 16")]
+        draw_order = [player.id for player in selected_players]
+
+        response = self.client.post(
+            reverse("new_evening"),
+            {
+                "season": self.season.id,
+                "date": "03/11/2026",
+                "board_count": "5",
+                "match_count": "5",
+                "players": [str(player.id) for player in selected_players],
+                "draw_order": json.dumps(draw_order),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "kan geen geldig schema worden gemaakt")
+        self.assertFalse(Evening.objects.filter(date="2026-11-03").exists())
+
     def test_stroman_player_is_required_and_used_for_odd_evening(self):
         selected_players = self.players[:5]
         data = {
@@ -751,6 +771,8 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "id_draw_order")
         self.assertContains(response, "Aanwezige spelers")
         self.assertContains(response, 'placeholder="dd/MM/yyyy"')
+        self.assertContains(response, 'id="board-capacity-note"')
+        self.assertContains(response, "Voor 4 blokken zijn minimaal 12 deelnemers nodig.")
         self.assertContains(response, 'name="match_count"')
         self.assertContains(response, 'value="5"')
 
