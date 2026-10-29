@@ -12,6 +12,7 @@ urlpatterns = [
     path("seizoenen/<int:season_id>/", views.season_detail, name="season_detail"),
     path("seizoenen/<int:season_id>/verwijderen/", views.delete_season, name="delete_season"),
     path("seizoenen/<int:season_id>/stand/", views.season_standings_view, name="season_standings"),
+    path("seizoenen/<int:season_id>/wordpress-export/", views.wordpress_export_view, name="wordpress_export"),
     path("avonden/nieuw/", views.new_evening, name="new_evening"),
     path("avonden/<int:evening_id>/", views.evening_detail, name="evening_detail"),
     path("avonden/<int:evening_id>/tussenstand/", views.evening_standings_view, name="evening_standings"),

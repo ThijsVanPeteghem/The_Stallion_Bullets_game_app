@@ -19,4 +19,7 @@
   <p class="muted">Positie tegenover de vorige speeldag: + gestegen, - gedaald, = gelijk gebleven, Nieuw bij eerste klassering.</p>
   {% include "bullets/standings_table.html" with standings=standings show_referees=True show_position_change=True %}
 </section>
+<div class="season-export-footer">
+  {% include "bullets/wordpress_export_button.html" with season_id=season.id %}
+</div>
 {% endblock %}

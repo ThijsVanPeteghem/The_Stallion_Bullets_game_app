@@ -83,6 +83,10 @@ De planner gebruikt een round-robin-/rotatiegedachte, maar maakt niet exact deze
 
 De actuele wedstrijd- en puntentelling is ook in de webapp te raadplegen via **Spelregels** in de navigatiebalk.
 
+Op het seizoenoverzicht en de seizoenstand kun je met **Kopiëren voor WordPress** alle wedstrijden, seizoenklassementen en tussenstanden als HTML-tabellen kopiëren en in de WordPress-editor plakken. Iedere afzonderlijke overzichtstabel heeft ook een knop **Tabel kopiëren**, bijvoorbeeld voor alleen het schema of de tussenstand van één avond. Wedstrijduitvoer bevat ook worpen, finishes en pijlen. Tabelkoppen zijn aanklikbaar om een tabel tijdelijk anders te sorteren; de standaardsortering blijft behouden totdat je een kolom kiest.
+
+Op de printpagina kun je met één knop **Briefjes kopiëren voor WordPress** alle voltooide wedstrijdbriefjes tegelijk kopiëren, inclusief uitslagen en statistieken.
+
 Elk gewonnen leg is één punt, behalve voor de stroman in diens extra partij. De partij telt als reguliere wedstrijd voor de overblijver, maar niet voor de stroman: geen extra wedstrijd-, winst/verlies- of legtotalen. Worpen, finishes en pijlen van de stroman blijven meetellen. Een 180- of 171-worp levert één punt op. Een finish van 100–160 levert één punt op; finishes van 161, 164, 167 en 170 leveren twee punten op. Minste pijlen levert geen bonuspunten op. 174- en 177-worpen worden niet meer ingevoerd of getoond; eerder opgeslagen gegevens blijven behouden.
 
 Maak een back-up door de app te stoppen en `data\competitie.sqlite3` te kopiëren. Bewaar ook de projectbestanden en het clublogo uit `assets`.

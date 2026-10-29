@@ -41,4 +41,7 @@
   {% include "bullets/stat_standings_table.html" with standings=standings selected_ranking=selected_ranking %}
   {% endif %}
 </section>
+<div class="season-export-footer">
+  {% include "bullets/wordpress_export_button.html" with season_id=season.id %}
+</div>
 {% endblock %}

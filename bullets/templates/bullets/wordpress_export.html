@@ -1,0 +1,142 @@
+<div class="wordpress-results">
+  <h1>{{ season.name }} - Competitieresultaten</h1>
+
+  <section>
+    <h2>Wedstrijdresultaten</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Datum</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">#</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Ronde</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Blok</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Wedstrijd</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Uitslag</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Worpen, finishes en pijlen</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Schrijver</th>
+      </tr></thead>
+      <tbody>
+      {% for item in matches %}
+        <tr>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.evening.date|date:"d/m/Y" }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.match.number }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.match.round_number }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.match.board }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">
+            {{ item.match.player1.name }}{% if item.match.stroman_player_id == item.match.player1_id %} (Stroman){% endif %}
+            vs
+            {% if item.match.player2 %}{{ item.match.player2.name }}{% if item.match.stroman_player_id == item.match.player2_id %} (Stroman){% endif %}{% else %}Stroman (historische tegenstander){% endif %}
+          </td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.match.export_score }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">
+            {% for player_stat in item.match.export_player_stats %}
+              <strong>{{ player_stat.player.name }}{% if player_stat.is_stroman %} (Stroman){% endif %}</strong>:
+              171: {{ player_stat.scores_171 }}, 180: {{ player_stat.scores_180 }}, HF: {{ player_stat.high_finishes }}, MP: {{ player_stat.least_darts }}<br>
+            {% endfor %}
+          </td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.match.referee|default_if_none:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" style="padding:7px;border:1px solid #d8c9c5;">Nog geen wedstrijden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {% for ranking in rankings %}
+  <section>
+    <h2>Seizoenklassement - {{ ranking.label }}</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        {% if ranking.key == "points" %}
+        <tr>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">#</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Speler</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Punten</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Matchen</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">W-V</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Legs +/−</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Legsaldo</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">HF</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">171</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">180</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Min. pijlen</th>
+        </tr>
+        {% else %}
+        <tr>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">#</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Speler</th>
+          <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">{{ ranking.label }}</th>
+        </tr>
+        {% endif %}
+      </thead>
+      <tbody>
+      {% for item in ranking.rows %}
+        {% if ranking.key == "points" %}
+        <tr>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.position }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.player.name }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.points }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.matches_played }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.wins }}-{{ item.row.losses }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.legs_for }}-{{ item.row.legs_against }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.legs_balance }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.highest_finish|default_if_none:"—" }} ({{ item.row.high_finishes }})</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.scores_171 }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.scores_180 }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.row.least_darts|default_if_none:"—" }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.position }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.player.name }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ item.value|default_if_none:"—" }}</td>
+        </tr>
+        {% endif %}
+      {% empty %}
+        <tr><td colspan="11" style="padding:7px;border:1px solid #d8c9c5;">Nog geen spelers om te tonen.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+
+  {% for evening in evening_standings %}
+  <section>
+    <h2>Tussenstand {{ evening.evening.date|date:"d/m/Y" }}</h2>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">#</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Speler</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Punten</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Matchen</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">W-V</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Legs +/−</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Legsaldo</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">HF</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">171</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">180</th>
+        <th style="padding:7px;border:1px solid #d8c9c5;text-align:left;">Min. pijlen</th>
+      </tr></thead>
+      <tbody>
+      {% for row in evening.rows %}
+        <tr>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.draw_order }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.player.name }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.points }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.matches_played }}/{{ row.matches_scheduled }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.wins }}-{{ row.losses }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.legs_for }}-{{ row.legs_against }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.legs_balance }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.highest_finish|default_if_none:"—" }} ({{ row.high_finishes }})</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.scores_171 }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.scores_180 }}</td>
+          <td style="padding:7px;border:1px solid #d8c9c5;">{{ row.least_darts|default_if_none:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="11" style="padding:7px;border:1px solid #d8c9c5;">Nog geen spelers om te tonen.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</div>

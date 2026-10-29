@@ -10,23 +10,30 @@ https://thestallionbullets.be/
 Op de competitiepagina staan aparte links naar speeldaguitslagen, het klassement, hoogste finishes en 180-worpen:
 https://thestallionbullets.be/maandelijkse-competitie/
 
-De Django-webapp berekent de resultaten en klassementen al. Ze draait momenteel lokaal en heeft geen gebruikersaccounts. Er is nog geen exportfunctie of WordPress-koppeling ingebouwd. Onderstaande opties zijn voorstellen, geen beschikbare functies.
+De Django-webapp berekent resultaten en klassementen en draait lokaal zonder gebruikersaccounts. De app heeft een kopieerfunctie voor WordPress, maar geen rechtstreekse WordPress-API-koppeling.
 
-## Optie 1: exporteren en plakken
+## Beschikbaar: kopiëren en plakken
 
-Voeg een knop **Kopieren voor WordPress** toe voor speeldagresultaten en seizoensklassementen.
+Op het seizoenoverzicht en de seizoenstand staat **Kopiëren voor WordPress**. Eén klik kopieert de volledige seizoensbundel als HTML-tabellen naar het klembord. Op afzonderlijke overzichtstabellen, ook op een competitieavond, staat daarnaast **Tabel kopiëren** om alleen die tabel te kopiëren.
+
+Op de printpagina staat één knop **Briefjes kopiëren voor WordPress** bovenaan. Die kopieert alle voltooide wedstrijdbriefjes tegelijk, inclusief datum, wedstrijdgegevens, uitslag, worpstatistieken en schrijver. Onvoltooide briefjes worden overgeslagen en de knop wordt niet mee afgedrukt.
+
+- Alle wedstrijden en uitslagen van het seizoen.
+- Per speler de 171/180-worpen, finishes en pijlen per wedstrijd.
+- Het puntenklassement en de klassementen voor 180, 171, hoogste finish (tot 170) en minste pijlen.
+- De tussenstand van iedere competitieavond.
 
 Werkwijze voor de beheerder:
 
-1. Voer de resultaten in de app in.
-2. Kopieer de gewenste tabel.
-3. Plak de tabel in de juiste WordPress-pagina en werk die bij.
+1. Werk de resultaten in de app bij.
+2. Klik op **Kopiëren voor WordPress**.
+3. Plak de tabellen in de gewenste WordPress-pagina en werk die bij.
 
-Dit vraagt geen automatische koppeling of extra hosting. Vooraf moet worden getest hoe de gebruikte WordPress-editor de tabellen overneemt. Een CSV-export voor een tabelplugin zoals TablePress is een alternatief; de importmogelijkheden hangen af van de gebruikte plugin en versie.
+Dit vraagt geen automatische koppeling of extra hosting. De tabellen worden als HTML gekopieerd, zodat de WordPress-editor ze als tabellen kan plakken. Controleer na het plakken de opmaak in de gebruikte editor.
 
-**Voordeel:** eenvoudig te realiseren en geen toegang tot WordPress nodig vanuit de app.
+**Voordeel:** geen toegang tot WordPress nodig vanuit de app; wijzigingen zijn met één export beschikbaar.
 
-**Nadeel:** de beheerder moet de tabellen na iedere speeldag of correctie handmatig overzetten.
+**Nadeel:** na iedere speeldag of correctie moet de beheerder de bijgewerkte tabellen handmatig in WordPress plakken.
 
 ## Optie 2: rechtstreeks publiceren vanuit de app
 
@@ -62,7 +69,7 @@ De huidige app is niet ingericht voor rechtstreekse publicatie op het internet. 
 
 Houd de app voorlopig lokaal en publiceer alleen de gewenste resultaten naar WordPress. De competitiecomputer hoeft dan niet permanent online te blijven en beheerfuncties worden niet publiek toegankelijk.
 
-- Kies **optie 1** als handmatig publiceren na elke speeldag volstaat.
+- Gebruik de beschikbare kopieerfunctie als handmatig publiceren na elke speeldag volstaat.
 - Kies **optie 2** als de beheerder met een knop de websitepagina's wil bijwerken.
 - Kies **optie 3** alleen wanneer er ook behoefte is aan een volwaardige online competitieapp.
 

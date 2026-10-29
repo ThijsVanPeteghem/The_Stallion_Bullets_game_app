@@ -960,6 +960,46 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, 'name="match_count"')
         self.assertContains(response, 'value="5"')
 
+    def test_wordpress_export_includes_matches_all_rankings_and_evening_standings(self):
+        match = self.evening.matches.filter(player2__isnull=False).first()
+        first_stat = match.stats.get(player=match.player1)
+        first_stat.scores_171 = 2
+        first_stat.high_finishes = "100"
+        first_stat.least_darts = "15"
+        first_stat.save()
+        second_stat = match.stats.get(player=match.player2)
+        second_stat.scores_180 = 1
+        second_stat.save()
+        response = self.client.get(
+            reverse("wordpress_export", args=[self.season.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["matches"]), self.evening.matches.count())
+        self.assertEqual(len(response.context["rankings"]), 5)
+        self.assertEqual(len(response.context["evening_standings"]), 1)
+        self.assertContains(response, "Wedstrijdresultaten")
+        self.assertContains(response, "Seizoenklassement - Punten")
+        self.assertContains(response, "Seizoenklassement - 180 worpen")
+        self.assertContains(response, "Seizoenklassement - 171 worpen")
+        self.assertContains(response, "Seizoenklassement - Hoogste finish")
+        self.assertContains(response, "Seizoenklassement - Minste pijlen")
+        self.assertContains(response, "Tussenstand 01/10/2026")
+        self.assertContains(response, "Worpen, finishes en pijlen")
+        self.assertContains(response, "171: 2")
+        self.assertContains(response, "180: 1")
+        self.assertContains(response, "HF: 100")
+        self.assertContains(response, "MP: 15")
+        self.assertContains(
+            self.client.get(reverse("season_detail", args=[self.season.id])),
+            "Kopiëren voor WordPress",
+        )
+        standings_page = self.client.get(
+            reverse("season_standings", args=[self.season.id])
+        )
+        self.assertContains(standings_page, "Kopiëren voor WordPress")
+        self.assertContains(standings_page, "tables.js")
+
     def test_evening_form_rejects_dates_outside_dutch_format(self):
         data = {
             "season": self.season.id,
@@ -1363,6 +1403,9 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "Wedstrijden ingepland")
         self.assertContains(response, "Scheids")
         self.assertContains(response, "Controle")
+        self.assertContains(response, "tables.js")
+        self.assertContains(response, 'class="copy-only"')
+        self.assertContains(response, "HF —")
         audit = response.context["match_audit"]
         self.assertEqual(len(audit), self.evening.attendances.count())
         self.assertEqual({row["matches"] for row in audit}, {5})
@@ -1426,9 +1469,11 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(print_response, "HF")
         self.assertContains(print_response, "MP")
         self.assertContains(print_response, "Scheidsrechter:")
+        self.assertNotContains(print_response, "Briefje kopiëren voor WordPress")
         self.assertNotContains(print_response, "stallion_bullets_logo.png")
         self.assertNotContains(print_response, "<td>0</td>")
         self.assertContains(print_response, "01/10/2026")
+        self.assertNotContains(print_response, "Briefjes kopiëren voor WordPress")
 
     def test_print_slip_includes_recorded_player_statistics(self):
         match = self.evening.matches.filter(player2__isnull=False).first()
@@ -1441,6 +1486,12 @@ class CompetitionFlowTests(TestCase):
         stat.high_finishes = "100, 120"
         stat.least_darts = "13, 15"
         stat.save()
+        opponent_stat = MatchPlayerStats.objects.get(
+            match=match,
+            player=match.player2,
+        )
+        opponent_stat.legs_won = 1
+        opponent_stat.save()
 
         response = self.client.get(reverse("print_evening", args=[self.evening.id]))
 
@@ -1452,6 +1503,9 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "13, 15")
         self.assertContains(response, "Scheidsrechter:")
         self.assertContains(response, f"Wedstrijd: <b>{match.number}</b>", html=True)
+        self.assertContains(response, "Briefjes kopiëren voor WordPress")
+        self.assertContains(response, 'data-copy-slips')
+        self.assertEqual(response.content.count(b"data-copy-slips>"), 1)
         self.assertContains(response, "<td>2</td><td>1</td><td>4</td><td>2</td><td>13, 15</td>", html=True)
         self.assertNotContains(response, "<th>174</th>")
         self.assertNotContains(response, "<th>177</th>")

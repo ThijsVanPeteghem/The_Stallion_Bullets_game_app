@@ -39,6 +39,10 @@ h2 { font-size: 19px; color: var(--club-red-dark); }
 .button:hover { text-decoration: none; filter: brightness(.96); }
 .button-secondary { background: #f1e5e2; color: var(--club-red-dark); }
 .button-danger { background: #a8333c; color: white; }
+.wp-export-action { display: flex; align-items: center; gap: 8px; }
+.season-export-footer { display: flex; justify-content: flex-end; margin: -4px 0 20px; }
+.table-copy-control { display: flex; align-items: center; gap: 8px; margin: 10px 0 18px; }
+.export-status { min-width: 1px; color: var(--muted); font-size: 13px; }
 .link-list, .player-list { margin: 0; padding: 0; list-style: none; }
 .link-list li { display: flex; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .link-list li:last-child { border-bottom: 0; }
@@ -85,6 +89,10 @@ button { margin-top: 14px; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th, td { padding: 10px 9px; border-bottom: 1px solid var(--line); text-align: left; }
 th { background: #f5ebe8; color: var(--club-red-dark); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.table-sort-button { display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.table-sort-button:hover { color: var(--club-red); }
+.table-sort-button:focus-visible { outline: 2px solid var(--club-red); outline-offset: 2px; }
+.table-sort-indicator { min-width: 1em; color: var(--muted); text-align: center; }
 tbody tr:hover { background: #fdf9f8; }
 .result-table-wrap { margin: 14px 0 8px; }
 .result-entry-table { min-width: 920px; }
@@ -114,6 +122,7 @@ tbody tr:hover { background: #fdf9f8; }
 .match-title { font-size: 20px; font-weight: 700; }
 footer { padding: 18px; text-align: center; color: var(--muted); }
 .print-toolbar { display: flex; max-width: 900px; margin: 20px auto; align-items: center; justify-content: space-between; }
+.match-slip-copy { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .match-slip { width: 190mm; margin: 0 auto 5mm; padding: 4mm 3mm; background: white; border-bottom: 1px solid #777; break-inside: avoid; page-break-inside: avoid; }
 .slip-meta { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 2mm; font-size: 10pt; }
 .slip-table { font-size: 9pt; }
@@ -132,7 +141,7 @@ footer { padding: 18px; text-align: center; color: var(--muted); }
 }
 @media print {
   body.print-page { background: white; color: black; font: 10pt/1.25 Arial, sans-serif; }
-  .print-toolbar { display: none; }
+  .print-toolbar, .match-slip-copy { display: none; }
   .match-slip { width: 100%; margin: 0; padding: 3mm 0; border-bottom: 1px solid black; break-inside: avoid; page-break-inside: avoid; }
   .slip-table { white-space: normal; }
   .slip-table th, .slip-table td { border-color: black; }

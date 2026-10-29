@@ -64,6 +64,8 @@ De avondpagina toont het schema, de ronde en het blok, tegenstanders, scheidsrec
 De tussenstand van een avond toont de klassementgegevens zonder het wedstrijdschema. Een wedstrijd is voltooid als voor iedere verwachte deelnemer een statistiekregel bestaat en het aantal gewonnen legs is ingevuld. Alleen een voltooid duel draagt de ingevoerde statistieken en punten bij aan de klassementberekening.
 Bij de punten en gespeelde wedstrijden staan voortgangsbalken. De puntenbalk vergelijkt met de hoogste huidige puntenscore; de wedstrijdbalk toont het aantal voltooide wedstrijden ten opzichte van het aantal ingeplande wedstrijden.
 
+Op het seizoenoverzicht en de seizoenstand kopieert **Kopiëren voor WordPress** alle wedstrijden, de vijf cumulatieve seizoenklassementen en de tussenstand per competitieavond als HTML-tabellen naar het klembord. Tabelkoppen kunnen worden aangeklikt om de betreffende tabel tijdelijk anders te sorteren; zonder klik blijft de standaardvolgorde behouden.
+
 ### Wedstrijdbriefjes
 
 De printpagina toont één afdrukbaar briefje per geplande wedstrijd met datum, ronde, blok, wedstrijdnummer, spelers, legs, 171/180, aantal high finishes, minste pijlen en scheidsrechter. Via de afdrukknop wordt de browserafdruk gestart. Bij een nieuwe stromanwedstrijd staan beide echte spelers op het briefje en is de extra speler als stroman gemarkeerd.

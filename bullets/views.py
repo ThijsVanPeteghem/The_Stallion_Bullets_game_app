@@ -406,7 +406,11 @@ def print_evening(request, evening_id):
     return render(
         request,
         "bullets/print_evening.html",
-        {"evening": evening, "matches": print_matches},
+        {
+            "evening": evening,
+            "matches": print_matches,
+            "has_completed_matches": any(item["match"].is_complete for item in print_matches),
+        },
     )
 
 
@@ -458,5 +462,84 @@ def season_standings_view(request, season_id):
             "selected_ranking": selected_ranking,
             "ranking_label": ranking_labels[selected_ranking],
             "show_position_change": selected_ranking == "points",
+        },
+    )
+
+
+def wordpress_export_view(request, season_id):
+    season = get_object_or_404(Season, pk=season_id)
+    evenings = list(season.evenings.order_by("date", "pk"))
+    matches = []
+    evening_standings = []
+    for evening in evenings:
+        context = _evening_context(evening)
+        evening_standings.append(
+            {"evening": evening, "rows": context["standings"]}
+        )
+        for match in context["matches"]:
+            stats = {stat.player_id: stat for stat in match.stats.all()}
+            first = stats.get(match.player1_id)
+            second = stats.get(match.player2_id)
+            match.export_player_stats = [
+                {
+                    "player": player,
+                    "is_stroman": stats[player.id].is_stroman,
+                    "scores_171": stats[player.id].scores_171,
+                    "scores_180": stats[player.id].scores_180,
+                    "high_finishes": stats[player.id].high_finishes or "—",
+                    "least_darts": stats[player.id].least_darts or "—",
+                }
+                for player in (match.player1, match.player2)
+                if player and player.id in stats
+            ]
+            if match.is_complete and first:
+                match.export_score = (
+                    f"{first.legs_won} - {second.legs_won}"
+                    if second
+                    else f"{first.legs_won} - Stroman"
+                )
+            else:
+                match.export_score = "Nog niet gespeeld"
+            matches.append({"evening": evening, "match": match})
+
+    standings = season_standings(season, evenings[-1] if evenings else None)
+    ranking_specs = [
+        ("points", "Punten", "points"),
+        ("scores_180", "180 worpen", "scores_180"),
+        ("scores_171", "171 worpen", "scores_171"),
+        ("highest_finish", "Hoogste finish", "highest_finish"),
+        ("least_darts", "Minste pijlen", "least_darts"),
+    ]
+    rankings = []
+    for ranking, label, value_key in ranking_specs:
+        rows = (
+            standings
+            if ranking == "points"
+            else sort_standings_for_ranking(standings, ranking)
+        )
+        rankings.append(
+            {
+                "key": ranking,
+                "label": label,
+                "rows": [
+                    {
+                        "position": position,
+                        "player": row["player"],
+                        "value": row[value_key],
+                        "row": row,
+                    }
+                    for position, row in enumerate(rows, start=1)
+                ],
+            }
+        )
+
+    return render(
+        request,
+        "bullets/wordpress_export.html",
+        {
+            "season": season,
+            "matches": matches,
+            "rankings": rankings,
+            "evening_standings": evening_standings,
         },
     )

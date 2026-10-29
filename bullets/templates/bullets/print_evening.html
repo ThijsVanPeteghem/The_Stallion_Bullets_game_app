@@ -5,16 +5,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wedstrijdbriefjes - The Stallion Bullets</title>
-  <link rel="stylesheet" href="{% static 'bullets/style.css' %}?v=compact-print-20261006">
+  <link rel="stylesheet" href="{% static 'bullets/style.css' %}?v=wordpress-slip-copy-20261029">
+  <script src="{% static 'bullets/tables.js' %}?v=wordpress-all-slips-20261029" defer></script>
 </head>
 <body class="print-page">
   <div class="print-toolbar">
     <strong>Wedstrijdbriefjes · {{ evening.date|date:"d/m/Y" }}</strong>
-    <div><button class="button" onclick="window.print()">Afdrukken</button> <a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Terug</a></div>
+    <div class="print-toolbar-actions">
+      {% if has_completed_matches %}
+      <button class="button button-secondary" type="button" data-copy-slips>Briefjes kopiëren voor WordPress</button>
+      <span class="export-status" data-copy-slips-status role="status" aria-live="polite"></span>
+      {% endif %}
+      <button class="button" type="button" onclick="window.print()">Afdrukken</button>
+      <a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Terug</a>
+    </div>
   </div>
   {% for item in matches %}
   {% with match=item.match %}
-  <article class="match-slip">
+  <article class="match-slip"{% if match.is_complete %} data-complete="true"{% endif %}>
     <div class="slip-meta">
       <span>Dartblok: <b>{{ match.board }}</b></span>
       <span>Wedstrijd: <b>{{ match.number }}</b></span>

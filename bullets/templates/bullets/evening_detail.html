@@ -15,7 +15,7 @@
   <h2>Wedstrijdschema</h2>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th></th><th class="copy-only" style="display:none">Worpen, finishes en pijlen</th></tr></thead>
     <tbody>
     {% for match in matches %}
       <tr>
@@ -28,6 +28,7 @@
         </td>
         <td>{% if match.referee %}<a href="{% url 'player_detail' match.referee_id %}">{{ match.referee }}</a>{% else %}—{% endif %}</td>
         <td><a href="{% url 'edit_match' match.id %}">{% if match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a></td>
+        <td class="copy-only" style="display:none">{% for stat in match.stats.all %}{{ stat.player.name }}{% if stat.is_stroman %} (Stroman){% endif %}: 171 {{ stat.scores_171 }}, 180 {{ stat.scores_180 }}, HF {{ stat.high_finishes|default:"—" }}, MP {{ stat.least_darts|default:"—" }}{% if not forloop.last %}; {% endif %}{% endfor %}</td>
       </tr>
     {% endfor %}
     </tbody>
