@@ -68,8 +68,8 @@ Zoek op de laptop het lokale IPv4-adres met `ipconfig`; open op een ander appara
 1. Maak een seizoen aan.
 2. Beheer spelers via **Spelers**; bestaande namen kun je daar aanpassen of inactief maken. Na een naamwijziging blijven eerdere avonden en statistieken aan dezelfde speler gekoppeld.
 3. Maak een competitieavond, voer de datum in als `dd/MM/yyyy`, kies 2 tot en met 30 dartsblokken, stel 1 tot en met 20 wedstrijden per speler in (standaard 5) en vink alleen de aanwezige spelers aan. De aanvinkvolgorde is de lotingsvolgorde.
-4. Een avond ondersteunt 4 tot en met 128 spelers. Elke speler krijgt het ingestelde aantal wedstrijden, inclusief een eventuele stromanwedstrijd. Het schema gebruikt verschillende tegenstanders waar mogelijk; bij kleine spelersaantallen of veel wedstrijden kunnen tegenstanders terugkeren.
-5. Per ronde worden alle blokken tegelijk gebruikt waar spelersaantal en scheidsrechterbeschikbaarheid dit toelaten. Elke speler kan maximaal één wedstrijd per ronde spelen. Alleen de laatste ronde kan minder wedstrijden bevatten als het totaal niet deelbaar is door het aantal bruikbare blokken. Een extra stromanwedstrijd staat in die laatste ronde of als laatste wedstrijd.
+4. Een avond ondersteunt 4 tot en met 128 spelers. Elke speler krijgt het ingestelde aantal reguliere wedstrijden. Als één speler overblijft, speelt die de laatste reguliere wedstrijd tegen een stroman die al eerder die avond speelde; die stroman heeft één extra fysieke deelname. Het schema gebruikt verschillende tegenstanders waar mogelijk; bij kleine spelersaantallen of veel wedstrijden kunnen tegenstanders terugkeren.
+5. Per ronde worden alle blokken tegelijk gebruikt waar spelersaantal en scheidsrechterbeschikbaarheid dit toelaten. Elke speler speelt maximaal één wedstrijd per ronde. Alleen de laatste ronde kan minder wedstrijden bevatten als het totaal niet deelbaar is door het aantal bruikbare blokken. Een eventuele stromanpartij is de laatste partij en kan een extra ronde vormen.
 6. Druk wedstrijdbriefjes af vanaf de avondpagina. Per wedstrijd wordt één briefje afgedrukt.
 7. Vul of corrigeer een resultaat via **Invullen/Bewerken**. Punten en klassementen worden direct opnieuw berekend.
 8. Een avond zonder ingevoerde uitslagen kun je via **Schema opnieuw opmaken** opnieuw laten plannen; dit vervangt de bestaande wedstrijdrecords. Na het invoeren van een uitslag/statistiek is opnieuw opmaken geblokkeerd.
@@ -83,7 +83,7 @@ De planner gebruikt een round-robin-/rotatiegedachte, maar maakt niet exact deze
 
 De actuele wedstrijd- en puntentelling is ook in de webapp te raadplegen via **Spelregels** in de navigatiebalk.
 
-Elk gewonnen leg is één punt, behalve voor een speler die als stroman is gemarkeerd. Een 180- of 171-worp levert één punt op. Een finish van 100–160 levert één punt op; finishes van 161, 164, 167 en 170 leveren twee punten op. Minste pijlen levert geen bonuspunten op. De stroman krijgt geen punten voor legs, maar wel voor geldige worpen en finishes. 174- en 177-worpen worden niet meer ingevoerd of getoond; eerder opgeslagen gegevens blijven behouden.
+Elk gewonnen leg is één punt, behalve voor de stroman in diens extra partij. De partij telt als reguliere wedstrijd voor de overblijver, maar niet voor de stroman: geen extra wedstrijd-, winst/verlies- of legtotalen. Worpen, finishes en pijlen van de stroman blijven meetellen. Een 180- of 171-worp levert één punt op. Een finish van 100–160 levert één punt op; finishes van 161, 164, 167 en 170 leveren twee punten op. Minste pijlen levert geen bonuspunten op. 174- en 177-worpen worden niet meer ingevoerd of getoond; eerder opgeslagen gegevens blijven behouden.
 
 Maak een back-up door de app te stoppen en `data\competitie.sqlite3` te kopiëren. Bewaar ook de projectbestanden en het clublogo uit `assets`.
 
@@ -106,7 +106,7 @@ Voer de import daarna uit in de gekozen database:
 python scripts\manage.py import_legacy_data
 ```
 
-De import maakt seizoen `2026-2027`, spelers, aanwezigheden, wedstrijdschema's, schrijvers, uitslagen en statistieken aan. De stromanmarkering wordt overgenomen; legs van die speler leveren geen punten op, de geregistreerde worpen en finishes blijven meetellen. De import stopt als een speeldag met dezelfde datum al bestaat. Bronbestanden worden niet aangepast.
+De import maakt seizoen `2026-2027`, spelers, aanwezigheden, wedstrijdschema's, schrijvers, uitslagen en statistieken aan. De stroman wordt afgeleid uit de speler met één extra optreden, die ook in de laatste partij moet staan; een eventuele `*`-markering in het bronbestand is niet vereist. De stroman krijgt geen match-, winst/verlies- of legtotalen uit diens extra partij, maar de geregistreerde worpen, finishes en pijlen blijven meetellen. De import stopt als een speeldag met dezelfde datum al bestaat. Bronbestanden worden niet aangepast.
 
 Bij een bekende schrijfvariant kan een expliciete naamkoppeling worden meegegeven, bijvoorbeeld:
 

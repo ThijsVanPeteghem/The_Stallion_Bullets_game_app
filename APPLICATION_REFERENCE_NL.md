@@ -48,7 +48,7 @@ De pagina **Spelregels** is via de navigatiebalk bereikbaar en geeft deelnemers 
 
 ### Nieuwe competitieavond
 
-De beheerder kiest een seizoen, datum, gevraagd aantal dartsblokken, aantal wedstrijden per speler en de aanwezige spelers.
+De beheerder kiest een seizoen, datum, gevraagd aantal dartsblokken, aantal wedstrijden per speler en de aanwezige spelers. Als een stromanpartij nodig is, kiest de beheerder voor automatische loting of selecteert die handmatig de speler die buiten de app is geloot. Bij automatische loting is de spelersdropdown uitgeschakeld.
 
 - Datumformaat in het formulier: `dd/MM/yyyy`.
 - Dartsblokken: minimaal 2, maximaal 30; beginwaarde 4.
@@ -66,7 +66,7 @@ Bij de punten en gespeelde wedstrijden staan voortgangsbalken. De puntenbalk ver
 
 ### Wedstrijdbriefjes
 
-De printpagina toont één afdrukbaar briefje per geplande wedstrijd met datum, ronde, blok, wedstrijdnummer, spelers, legs, 171/180, aantal high finishes, minste pijlen en scheidsrechter. Via de afdrukknop wordt de browserafdruk gestart. Bij een stromanwedstrijd staat “Stroman” als tegenstander.
+De printpagina toont één afdrukbaar briefje per geplande wedstrijd met datum, ronde, blok, wedstrijdnummer, spelers, legs, 171/180, aantal high finishes, minste pijlen en scheidsrechter. Via de afdrukknop wordt de browserafdruk gestart. Bij een nieuwe stromanwedstrijd staan beide echte spelers op het briefje en is de extra speler als stroman gemarkeerd.
 
 ### Schema opnieuw opmaken en avond verwijderen
 
@@ -78,13 +78,13 @@ De printpagina toont één afdrukbaar briefje per geplande wedstrijd met datum, 
 
 ### Aantal wedstrijden
 
-Iedere aanwezige krijgt het ingestelde aantal wedstrijden, inclusief een eventuele wedstrijd tegen de stroman. Het totale aantal wedstrijden is:
+Iedere aanwezige krijgt het ingestelde aantal reguliere wedstrijden. Als het aantal benodigde spelersplaatsen oneven is, blijft één aanwezige over voor de laatste reguliere wedstrijd. Een andere speler die al eerder die avond speelde, wordt als stroman geloot en speelt die partij als extra wedstrijd. Het totale aantal partijen blijft:
 
 ```text
 ceil(aantal spelers × wedstrijden per speler / 2)
 ```
 
-De afronding naar boven is nodig wanneer het product oneven is. Bij zo'n geval kan een wedstrijd een stroman bevatten, die geen echte speler is.
+De afronding naar boven is nodig wanneer het product oneven is. De laatste partij heeft dan twee echte spelers: de overblijver en de stroman. De stroman heeft één extra fysieke deelname, maar die telt niet als extra reguliere wedstrijd.
 
 ### Ronden, blokken en rust
 
@@ -103,7 +103,7 @@ De afronding naar boven is nodig wanneer het product oneven is. Bij zo'n geval k
 De Excel-voorbeelden gebruiken een herkenbaar cyclisch round-robinpatroon: per speeldag schuiven de tegenstanders door, zodat spelers zo veel mogelijk verschillende tegenstanders krijgen. De huidige planner gebruikt een vergelijkbare basis, maar reproduceert niet de vaste Excel-tabellen of hun exacte ronde-indeling.
 
 - Bij een even aantal spelers bouwt de planner eerst round-robinrondes met de circle method op. Bij meer gevraagde wedstrijden dan unieke rondes kunnen die pairings terugkomen.
-- Bij een oneven aantal spelers bouwt de planner pairings op basis van cyclische offsets en voegt die, wanneer het aantal wedstrijden per speler oneven is, één wedstrijd tegen de virtuele stroman toe. De gekozen speler bepaalt wie die wedstrijd speelt.
+- Bij een oneven aantal spelers bouwt de planner pairings op basis van cyclische offsets. Als een speler overblijft, wordt die in de laatste reguliere wedstrijd gekoppeld aan een andere aanwezige die al eerder die avond speelde; die tegenstander is de stroman en speelt één extra wedstrijd.
 - Daarna schudt en verdeelt de planner de pairings opnieuw over speelrondes en dartsblokken. Daarbij houdt hij rekening met scheidsrechterbeschikbaarheid en -verdeling, blokroulatie en maximaal één wedstrijd per speler per ronde. Daardoor kunnen dezelfde basispairings in een andere ronde of op een ander blok terechtkomen dan in Excel.
 - Het aantal gelijktijdige wedstrijden kan lager zijn dan in Excel. Zo begrenst de app bij 10 of 11 aanwezige spelers het aantal blokken voor het schema tot maximaal 3, ook als er meer blokken zijn gevraagd. De 10-spelerslijst met vijf gelijktijdige wedstrijden per ronde is dus geen exacte verwachting voor de app.
 - De app maakt voor 10 spelers met vijf wedstrijden per speler 25 wedstrijden; voor 11 spelers zijn dat 28 wedstrijden, inclusief één stromanwedstrijd. De verdeling over rondes volgt de beschikbare blokken en scheidsrechters, niet noodzakelijk de vijf plus één rondes uit het Excel-voorbeeld.
@@ -113,9 +113,9 @@ Kort gezegd: de round-robin-/rotatiegedachte is vergelijkbaar, maar de exacte te
 
 ### Stroman
 
-Een nieuw gegenereerd schema gebruikt de virtuele tegenstander “Stroman”; de aanwezige speler die daarvoor wordt gekozen krijgt geen punten voor legs, maar krijgt wel punten voor 180-, 171-worpen en de geldende high finishes. De stromanwedstrijd staat als laatste in de avondplanning.
+De stroman is een echte aanwezige speler die al eerder die avond een reguliere wedstrijd speelde. De stroman wordt automatisch geloot of handmatig geselecteerd en speelt als extra tegenstander van de speler die anders zou overblijven. Beide echte spelers krijgen statistiekregels en kunnen uitslagen en worpen registreren.
 
-In de geïmporteerde oude speeldagen is de stroman zelf een aanwezige speler, aangeduid met `*` in de bron. De twee spelers en hun uitslagen worden allebei bewaard. De gemarkeerde speler krijgt geen punten voor legs, maar wel voor de geregistreerde worpen en finishes. In de bronbestanden speelt deze persoon één wedstrijd extra.
+De laatste partij telt als reguliere wedstrijd voor de overblijver. Voor de stroman telt die niet als extra gespeelde wedstrijd en tellen diens legs niet mee voor punten, winst/verlies of legs voor/tegen. De stroman behoudt wel punten en statistieken voor 171/180-worpen en geldige finishes; pijlenstatistieken blijven eveneens meetellen. Bij import wordt de stroman afgeleid uit de speler met precies één extra optreden; die moet ook in de laatste partij staan. Een eventuele `*` in het bronbestand is een extra controle, geen vereiste.
 
 ## 4. Uitslag- en statistiekregels
 
@@ -127,15 +127,16 @@ Per echte speler per wedstrijd worden legs, aantallen speciale worpen, high fini
 - Bij een gewone wedstrijd moeten de legs van beide spelers samen exact 3 zijn.
 - Iedere legs-invoer ligt tussen 0 en 3.
 - Een correctie overschrijft de eerdere invoer; klassementen worden uit de opgeslagen records opnieuw berekend.
-- Voor een stromanwedstrijd vult men alleen de legs van de echte speler in. De virtuele tegenstander heeft geen invoerveld of statistiekrecord.
-- Voor de stromanwedstrijd leidt de klassementlogica de legs van de virtuele tegenstander af als `3 - legs van de echte speler`.
+- In een nieuwe stromanwedstrijd vullen beide echte spelers hun legs en statistieken in; samen zijn de legs exact drie.
+- De uitslag telt als gewone wedstrijd voor de overblijver. Voor de stroman zelf tellen alleen worpen, finishes en pijlen mee, niet de legs, winst/verlies of het wedstrijdtotaal.
+- Historische wedstrijden met een ontbrekende tweede speler blijven leesbaar; de virtuele tegenstander is uitsluitend een oud gegevensformaat.
 
 ### Bonusstatistieken en punten
 
 De punten van een speler in een voltooide wedstrijd zijn:
 
 ```text
-gewonnen legs (niet in een stromanwedstrijd)
+gewonnen legs (niet voor de stroman)
 + aantal 180-worpen
 + aantal 171-worpen
 + high finishes van 100 t/m 160: 1 punt per finish
@@ -157,9 +158,9 @@ Validatie van invoer:
 Het avond- en seizoensklassement bevat:
 
 - **Punten:** punt per gewonnen leg (behalve in de stromanwedstrijd) plus de hierboven beschreven punten uit voltooide wedstrijden.
-- **Matchen:** aantal statistiekregels dat in voltooide wedstrijden is meegeteld. Een niet-voltooide wedstrijd telt niet mee.
-- **W-V:** gewonnen en verloren wedstrijden. Een gewone partij wordt beslist door de ingevoerde legverhouding. Een stromanpartij wordt beslist door de vergelijking van de echte speler met de afgeleide drie legs.
-- **Legs +/−:** legs voor en tegen; bij een stromanpartij telt de afgeleide score van de virtuele speler als tegen-legs.
+- **Matchen:** aantal voltooide reguliere wedstrijden. De extra stroman-deelname telt niet mee voor de stroman.
+- **W-V:** gewonnen en verloren reguliere wedstrijden. Een stromanwedstrijd telt voor de overblijver, maar niet voor de stroman.
+- **Legs +/−:** legs voor en tegen van reguliere wedstrijden. De legs van de stroman tellen niet mee in diens eigen klassement.
 - **Legsaldo:** legs voor minus legs tegen.
 - **HF:** hoogste ingevoerde finish en tussen haakjes het totale aantal geregistreerde high finishes.
 - **Min. pijlen:** laagste geldige ingevoerde pijlenwaarde over alle voltooide wedstrijden.
@@ -196,7 +197,7 @@ De klassementlogica wordt geïmplementeerd in [bullets/services.py](./bullets/se
 | Speler | Kan meerdere avonden, wedstrijden, statistieken en scheidsrechterbeurten hebben. Inactief zetten behoudt historie. |
 | Avond | Hoort bij één seizoen en bewaart datum, gevraagd aantal blokken en aantal wedstrijden per speler. |
 | Aanwezigheid | Koppelt één speler aan één avond en bewaart lotingsnummer. De speler en lotingsnummers zijn per avond uniek. |
-| Wedstrijd | Hoort bij één avond; bewaart wedstrijdnummer, ronde, blok, twee echte spelers (waarbij de tweede ontbreekt bij een stromanwedstrijd) en optionele scheidsrechter. |
+| Wedstrijd | Hoort bij één avond; bewaart wedstrijdnummer, ronde, blok, twee echte spelers en optionele scheidsrechter. Oudere phantom-wedstrijden kunnen een ontbrekende tweede speler hebben. |
 | Spelerstatistiek | Eén record per speler per wedstrijd; legs kunnen nog leeg zijn zolang de uitslag niet is ingevuld. |
 
 Avond verwijderen verwijdert de avondafhankelijke wedstrijd- en aanwezigheidsgegevens. Spelers worden door bestaande relaties beschermd tegen verwijderen zolang zij historisch gebruikt zijn. Een seizoen verwijderen is cascadegedrag in het model, maar heeft geen gebruikersactie in de huidige interface.
@@ -219,9 +220,9 @@ Gebruik dit als functionele acceptatiechecklist. Een pipeline moet waar mogelijk
 
 - [ ] Totaal geplande wedstrijden volgt `ceil(spelers × wedstrijden_per_speler / 2)`.
 - [ ] Het totaal wordt voor ieder ondersteund spelersaantal (4–128) en iedere instelling (1–20 wedstrijden per speler) gecontroleerd met `ceil(spelers × wedstrijden_per_speler / 2)`.
-- [ ] Elke aanwezige komt precies het ingestelde aantal keer voor als echte speler, inclusief eventuele stromanwedstrijd.
+- [ ] Elke aanwezige heeft precies het ingestelde aantal reguliere wedstrijden; de stroman heeft daarnaast één extra fysieke deelname die niet als reguliere wedstrijd telt.
 - [ ] Geen echte speler speelt meer dan één keer in dezelfde ronde.
-- [ ] Als een stromanwedstrijd nodig is, is de gekozen speler de deelnemer, speelt die speler in dezelfde ronde geen gewone wedstrijd en is de stromanwedstrijd de laatste van de avond.
+- [ ] Als een stromanwedstrijd nodig is, bevat de laatste partij twee echte spelers: de overblijver en een stroman die eerder die avond al regulier speelde. De stroman speelt die ronde geen andere partij.
 - [ ] Geen scheidsrechter speelt in dezelfde ronde; geen scheidsrechter krijgt meer dan één wedstrijd per ronde.
 - [ ] Per aanwezige is het ingeplande aantal wedstrijden gelijk aan de ingestelde waarde; de avondcontrole vergelijkt dit voor iedere speler.
 - [ ] Gebruikte bloknummers zijn positief, aaneengesloten vanaf 1 en niet groter dan het gevraagde aantal.
@@ -241,7 +242,7 @@ Gebruik dit als functionele acceptatiechecklist. Een pipeline moet waar mogelijk
 - [ ] Alleen 180- en 171-worpen en de geldende high finishes leveren bonuspunten op.
 - [ ] Finishwaarden zijn 2–170; pijlenwaarden zijn 1–99 en maximaal drie per speler per wedstrijd. Alleen voorgeschreven finishes tellen als punten.
 - [ ] Een uitslagcorrectie vervangt eerdere waarden en veroorzaakt geen dubbele punten.
-- [ ] Een stroman heeft geen eigen record of punten; de virtuele score wordt alleen voor de echte speler als legs-tegen/-verhouding gebruikt.
+- [ ] De stroman heeft een eigen statistiekrecord. De partij telt voor de overblijver als regulier duel; de stroman krijgt geen legs-, W/V- of matchaantallen, maar worpen, finishes en pijlen tellen wel mee.
 - [ ] Seizoensstand bevat alleen spelers met avonddeelname en sorteert op de vijf vastgelegde criteria.
 - [ ] Scheidsrechterbeurten in het klassement tellen uit het schema, onafhankelijk van voltooiing van de uitslag.
 
@@ -255,7 +256,7 @@ Gebruik dit als functionele acceptatiechecklist. Een pipeline moet waar mogelijk
 
 ## 8. Bekende aandachtspunten en regels die niet moeten worden verondersteld
 
-1. **Stroman-scorevalidatie:** voor gewone wedstrijden is de som van legs expliciet gevalideerd. Voor een stromanwedstrijd wordt alleen de waarde 0–3 voor de echte speler gevalideerd; de virtuele score wordt rekenkundig `3 - echte_legs`. De invoervalidatie verhindert dus niet zelf iedere mogelijk onrealistische uitkomst. Beslis of een aanvullende regel gewenst is voordat een pipeline daar een verwachting van maakt.
+1. **Historische stromanwedstrijden:** oude databases kunnen nog phantom-wedstrijden met een ontbrekende tweede speler bevatten. Nieuwe schema's gebruiken twee echte spelers en markeren de extra deelnemer als stroman.
 2. **Schema-exactheid:** de planner gebruikt heuristiek, meerdere pogingen voor kleine groepen en een vaste seed-afleiding. Niet alle geldige roosterkeuzes zijn een contract. Valideer invarianten en geen specifieke paringen.
 3. **Tegenstanders:** herhaalde tegenstanders zijn uitdrukkelijk mogelijk bij kleine groepen of veel wedstrijden.
 4. **Aanwezigheid en klassement:** een speler die niet op een avond aanwezig is, krijgt voor die avond geen nulscore-record; klassementen zijn opgebouwd uit geregistreerde deelnames en voltooide wedstrijden.

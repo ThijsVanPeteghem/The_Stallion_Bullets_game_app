@@ -28,7 +28,14 @@
         <small>Kies van 1 tot en met 20 wedstrijden per speler.</small>
         {% for error in form.match_count.errors %}<span class="error">{{ error }}</span>{% endfor %}
       </div>
-      <div>
+    </div>
+    <div id="stroman-options" class="stroman-options">
+      <div class="stroman-auto-control">
+        <label for="{{ form.auto_stroman.id_for_label }}">{{ form.auto_stroman }} {{ form.auto_stroman.label }}</label>
+        <small id="stroman-note" class="stroman-note" aria-live="polite"></small>
+        {% for error in form.auto_stroman.errors %}<span class="error">{{ error }}</span>{% endfor %}
+      </div>
+      <div class="stroman-player-control">
         {{ form.stroman_player.label_tag }}{{ form.stroman_player }}
         <small>{{ form.stroman_player.help_text }}</small>
         {% for error in form.stroman_player.errors %}<span class="error">{{ error }}</span>{% endfor %}
@@ -39,13 +46,13 @@
       <div><h2>Aanwezige spelers</h2><p class="muted">Vink spelers aan in de gelote volgorde (4–128).</p></div>
       <span id="selection-count" class="badge">0 geselecteerd</span>
     </div>
-    <p id="small-field-note" class="small-field-note" hidden></p>
     {% for error in form.players.errors %}<p class="error">{{ error }}</p>{% endfor %}
     {% if form.players.field.queryset %}
       <div class="player-selection">{{ form.players }}</div>
     {% else %}
       <p class="muted">Er staan nog geen actieve spelers in de spelerslijst. Voeg ze eerst toe via <a href="{% url 'players' %}">Spelers</a>.</p>
     {% endif %}
+    <p id="small-field-note" class="small-field-note optional-field-note" hidden></p>
     <div class="selection-order">
       <strong>Lotingsvolgorde</strong>
       <ol id="draw-order-list"><li class="muted">Vink spelers aan om hun volgorde te bepalen.</li></ol>
@@ -66,6 +73,9 @@
   const boardCountInput = document.getElementById("id_board_count");
   const matchCountInput = document.getElementById("id_match_count");
   const stromanInput = document.getElementById("id_stroman_player");
+  const autoStromanInput = document.getElementById("id_auto_stroman");
+  const stromanOptions = document.getElementById("stroman-options");
+  const stromanNote = document.getElementById("stroman-note");
   const names = new Map(checkboxes.map(box => [box.value, box.closest("label").textContent.trim()]));
   const selectedOrder = (() => {
     try { return JSON.parse(orderInput.value || "[]").map(String); }
@@ -102,19 +112,25 @@
     }
     const matchCount = matchCountInput.value || "5";
     const needsStroman = order.length % 2 === 1 && Number(matchCount) % 2 === 1;
-    stromanInput.required = needsStroman;
-    if (!needsStroman || !order.includes(stromanInput.value)) {
+    autoStromanInput.disabled = !needsStroman;
+    stromanInput.disabled = !needsStroman || autoStromanInput.checked;
+    stromanInput.required = needsStroman && !autoStromanInput.checked;
+    stromanNote.textContent = !needsStroman
+      ? "Voor deze combinatie is geen stroman nodig."
+      : autoStromanInput.checked
+        ? "De app loot automatisch een speler die eerder in de avond speelde."
+        : "Selecteer de gelote speler die eerder in de avond speelde.";
+    if (!needsStroman || autoStromanInput.checked || !order.includes(stromanInput.value)) {
       stromanInput.value = "";
     }
-    smallFieldNote.hidden = !needsStroman && order.length !== 4;
-    smallFieldNote.textContent = needsStroman
-      ? "Kies hierboven welke speler de stroman speelt; deze wedstrijd wordt als laatste ingepland."
-      : order.length === 4
-        ? `Met 4 spelers zijn herhaalde tegenstanders nodig om iedereen ${matchCount} wedstrijden te geven.`
-        : "";
+    smallFieldNote.hidden = order.length !== 4 || needsStroman;
+    smallFieldNote.textContent = order.length === 4 && !needsStroman
+      ? `Met 4 spelers zijn herhaalde tegenstanders nodig om iedereen ${matchCount} wedstrijden te geven.`
+      : "";
     if (order.length === 0) {
       const empty = document.createElement("li");
       empty.className = "muted";
+      empty.style.gridColumn = "1 / -1";
       empty.textContent = "Vink spelers aan om hun volgorde te bepalen.";
       orderList.append(empty);
       return;
@@ -132,6 +148,7 @@
   }
   boardCountInput.addEventListener("input", render);
   matchCountInput.addEventListener("input", render);
+  autoStromanInput.addEventListener("change", render);
   render();
 })();
 </script>

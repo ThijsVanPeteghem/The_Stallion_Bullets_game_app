@@ -31,10 +31,11 @@
 <section class="panel">
   <h2>Stroman</h2>
   <ul>
-    <li>In een stromanwedstrijd speelt één aanwezige speler tegen de virtuele tegenstander “Stroman”.</li>
-    <li>De speler krijgt in die wedstrijd geen punten voor gewonnen legs, maar behoudt eventuele punten voor 171/180-worpen en bonuswaardige finishes.</li>
-    <li>De stromanwedstrijd telt wel mee als gespeelde wedstrijd en voor de uitslag- en legstatistieken.</li>
-    <li>In oudere geïmporteerde speeldagen kan de stroman als aanwezige speler met een markering zijn geregistreerd. Ook daar krijgt de gemarkeerde speler geen punten voor legs.</li>
+    <li>Als na de gewone planning één speler overblijft, speelt die de laatste reguliere wedstrijd tegen een echte deelnemer die al eerder die avond speelde.</li>
+    <li>Die extra tegenstander is de stroman. De app kan de stroman willekeurig loten of de beheerder kan de gelote speler handmatig selecteren.</li>
+    <li>De wedstrijd telt als reguliere partij voor de overblijver. Voor de stroman telt die niet mee als extra gespeelde wedstrijd en tellen legs, winst/verlies en legs voor/tegen niet mee.</li>
+    <li>Worpen, finishes en pijlen van de stroman blijven wel meetellen. De stroman krijgt geen punten voor gewonnen legs.</li>
+    <li>Oudere geïmporteerde phantom-wedstrijden met een virtuele tegenstander blijven als historische gegevens zichtbaar.</li>
   </ul>
 </section>
 
@@ -56,10 +57,10 @@
   <h2>Speelschema</h2>
   <p>De planner gebruikt een round-robin-/rotatiegedachte om tegenstanders te variëren, maar garandeert niet exact dezelfde ronde-indeling als het oude Excel-schema. Het aantal wedstrijden per speler, beschikbare dartsblokken, rust en scheidsrechterverdeling beïnvloeden de indeling.</p>
   <ul>
-    <li>Iedere speler krijgt het ingestelde aantal wedstrijden.</li>
+    <li>Iedere speler krijgt het ingestelde aantal reguliere wedstrijden; alleen de stroman heeft daarnaast één extra deelname.</li>
     <li>Een speler speelt maximaal één wedstrijd per ronde.</li>
     <li>Een scheidsrechter speelt niet zelf in een wedstrijd van dezelfde ronde en wordt per ronde maximaal één keer toegewezen.</li>
-    <li>Een stromanwedstrijd is de laatste wedstrijd in de planning.</li>
+    <li>De stromanwedstrijd is de laatste wedstrijd in de planning en gebruikt twee echte spelers.</li>
   </ul>
   <p><a href="{% url 'home' %}">Terug naar het overzicht</a></p>
 </section>

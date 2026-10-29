@@ -228,37 +228,50 @@ def parse_legacy_file(path):
     numbers = [item["number"] for item in matches]
     if numbers != list(range(1, len(matches) + 1)):
         raise LegacyImportError(f"{path.name}: wedstrijdnummers zijn niet aaneengesloten.")
-    if sum(player["is_stroman"] for item in matches for player in item["players"]) != 1:
-        raise LegacyImportError(
-            f"{path.name}: verwacht precies één speler die als stroman is gemarkeerd."
-        )
-    if not matches[-1]["players"][0]["is_stroman"] and not matches[-1]["players"][1]["is_stroman"]:
-        raise LegacyImportError(
-            f"{path.name}: de stroman moet de laatste wedstrijd spelen."
-        )
-
     appearances = Counter(
         player["name"]
         for item in matches
         for player in item["players"]
     )
-    stroman_name = next(
+    highest_appearance_count = max(appearances.values())
+    stroman_candidates = [
+        name
+        for name, count in appearances.items()
+        if count == highest_appearance_count
+    ]
+    stroman_name = stroman_candidates[0] if len(stroman_candidates) == 1 else None
+    match_count = highest_appearance_count - 1
+    if (
+        stroman_name is None
+        or match_count < 1
+        or any(
+            count != (match_count + 1 if name == stroman_name else match_count)
+            for name, count in appearances.items()
+        )
+    ):
+        raise LegacyImportError(
+            f"{path.name}: spelersaantallen kloppen niet; één speler moet precies één extra wedstrijd hebben."
+        )
+    last_match_players = matches[-1]["players"]
+    if stroman_name not in {player["name"] for player in last_match_players}:
+        raise LegacyImportError(
+            f"{path.name}: de speler met één extra wedstrijd moet in de laatste wedstrijd staan."
+        )
+    marked_names = {
         player["name"]
         for item in matches
         for player in item["players"]
         if player["is_stroman"]
-    )
-    regular_counts = [
-        count for name, count in appearances.items() if name != stroman_name
-    ]
-    match_count = Counter(regular_counts).most_common(1)[0][0]
-    if (
-        any(count != match_count for name, count in appearances.items() if name != stroman_name)
-        or appearances[stroman_name] != match_count + 1
-    ):
+    }
+    if marked_names and marked_names != {stroman_name}:
         raise LegacyImportError(
-            f"{path.name}: spelersaantallen kloppen niet; alleen de stroman hoort één extra wedstrijd te spelen."
+            f"{path.name}: de *-markering komt niet overeen met de speler met één extra wedstrijd."
         )
+    for item in matches:
+        for player in item["players"]:
+            player["is_stroman"] = (
+                item is matches[-1] and player["name"] == stroman_name
+            )
 
     player_order = list(
         dict.fromkeys(

@@ -1,7 +1,7 @@
 from django.db import transaction
 
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player
-from .schedule import generate_schedule
+from .schedule import StromanSelectionError, generate_schedule
 
 
 def _create_matches(evening, players, stroman_player=None):
@@ -15,7 +15,7 @@ def _create_matches(evening, players, stroman_player=None):
             None,
         )
         if stroman_player is not None
-        else 0
+        else None
     )
     if stroman_player is not None and stroman_index is None:
         raise ValueError("De gekozen stroman moet bij deze competitieavond aanwezig zijn.")
@@ -41,10 +41,14 @@ def _create_matches(evening, players, stroman_player=None):
         MatchPlayerStats.objects.create(
             match=match,
             player=player1,
-            is_stroman=match.is_phantom_match,
+            is_stroman=item.get("stroman_player") == item["player1"],
         )
         if player2:
-            MatchPlayerStats.objects.create(match=match, player=player2)
+            MatchPlayerStats.objects.create(
+                match=match,
+                player=player2,
+                is_stroman=item.get("stroman_player") == item["player2"],
+            )
 
 
 @transaction.atomic
@@ -80,8 +84,16 @@ def regenerate_evening_schedule(evening):
         Player.objects.filter(attendances__evening=evening)
         .order_by("attendances__draw_order")
     )
+    stroman_stats = MatchPlayerStats.objects.filter(
+        match__evening=evening,
+        is_stroman=True,
+    ).select_related("player").first()
     stroman_match = evening.matches.filter(player2__isnull=True).first()
-    stroman_player = stroman_match.player1 if stroman_match else None
+    stroman_player = (
+        stroman_stats.player
+        if stroman_stats
+        else stroman_match.player1 if stroman_match else None
+    )
     evening.matches.all().delete()
     _create_matches(evening, players, stroman_player)
 
@@ -130,8 +142,9 @@ def build_standings(players, matches, attendance=None):
             if row is None:
                 continue
             row["points"] += stat.points
-            row["matches_played"] += 1
-            row["legs_for"] += stat.legs_won or 0
+            if not match.is_phantom_match and not stat.is_stroman:
+                row["matches_played"] += 1
+                row["legs_for"] += stat.legs_won or 0
             row["high_finishes"] += len(stat.finish_values())
             finish_values = stat.finish_values()
             if finish_values:
@@ -150,22 +163,14 @@ def build_standings(players, matches, attendance=None):
             first = stat_by_player.get(match.player1_id)
             second = stat_by_player.get(match.player2_id)
             if first and second:
-                rows[match.player1_id]["legs_against"] += second.legs_won or 0
-                rows[match.player2_id]["legs_against"] += first.legs_won or 0
-                if first.legs_won > second.legs_won:
-                    rows[match.player1_id]["wins"] += 1
-                    rows[match.player2_id]["losses"] += 1
-                else:
-                    rows[match.player2_id]["wins"] += 1
-                    rows[match.player1_id]["losses"] += 1
-        elif stats:
-            stat = stats[0]
-            opponent_legs = 3 - (stat.legs_won or 0)
-            rows[stat.player_id]["legs_against"] += opponent_legs
-            if (stat.legs_won or 0) > opponent_legs:
-                rows[stat.player_id]["wins"] += 1
-            else:
-                rows[stat.player_id]["losses"] += 1
+                for stat, opponent_stat in ((first, second), (second, first)):
+                    if stat.is_stroman:
+                        continue
+                    rows[stat.player_id]["legs_against"] += opponent_stat.legs_won or 0
+                    if stat.legs_won > opponent_stat.legs_won:
+                        rows[stat.player_id]["wins"] += 1
+                    else:
+                        rows[stat.player_id]["losses"] += 1
     for row in rows.values():
         row["legs_balance"] = row["legs_for"] - row["legs_against"]
     return list(rows.values())

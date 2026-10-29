@@ -37,7 +37,7 @@
         <td><a href="{% url 'evening_detail' row.match.evening_id %}">{{ row.match.evening.date|date:"d/m/Y" }}</a></td>
         <td>{{ row.match.evening.season.name }}</td>
         <td>{{ row.match.number }}</td><td>{{ row.match.round_number }}</td><td>{{ row.match.board }}</td>
-        <td>{% if row.opponent %}<a href="{% url 'player_detail' row.opponent.id %}">{{ row.opponent.name }}</a>{% else %}Stroman{% endif %}{% if row.stats.is_stroman %} <span class="badge">Stroman</span>{% endif %}</td>
+        <td>{% if row.opponent %}<a href="{% url 'player_detail' row.opponent.id %}">{{ row.opponent.name }}</a>{% else %}Stroman (virtuele tegenstander){% endif %}{% if row.stats.is_stroman %} <span class="badge">Speelt stroman</span>{% endif %}</td>
         <td>{% if row.match.is_complete and row.stats %}{{ row.stats.legs_won }}{% if row.opponent_stats %} - {{ row.opponent_stats.legs_won }}{% endif %}{% else %}<span class="muted">Nog niet gespeeld</span>{% endif %}</td>
         <td>{% if row.high_finishes %}{{ row.high_finishes|join:", " }}{% else %}—{% endif %}</td>
         <td>{% if row.match.referee %}<a href="{% url 'player_detail' row.match.referee_id %}">{{ row.match.referee.name }}</a>{% else %}—{% endif %}</td>

@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 import json
 
 from .models import Player, Season
@@ -47,13 +48,19 @@ class EveningForm(forms.Form):
             label="Speler die de stroman speelt",
             required=False,
             empty_label="Selecteer een speler",
-            help_text="Verplicht bij een oneven aantal spelers en wedstrijden per speler.",
+            help_text="De gekozen speler speelt als extra tegenstander van de overblijver.",
+        )
+        self.fields["auto_stroman"] = forms.BooleanField(
+            label="Stroman loting auto",
+            required=False,
+            initial=True,
         )
         self.fields["draw_order"] = forms.CharField(widget=forms.HiddenInput)
 
     season = forms.ModelChoiceField(queryset=Season.objects.all(), label="Seizoen")
     date = forms.DateField(
         label="Datum",
+        initial=timezone.localdate,
         input_formats=["%d/%m/%Y"],
         widget=forms.DateInput(
             format="%d/%m/%Y",
@@ -98,11 +105,14 @@ class EveningForm(forms.Form):
         cleaned_data["ordered_players"] = [players_by_id[player_id] for player_id in order]
 
         stroman_player = cleaned_data.get("stroman_player")
+        auto_stroman = cleaned_data.get("auto_stroman", False)
         requires_stroman = (
             len(players) % 2 == 1
             and cleaned_data.get("match_count", 0) % 2 == 1
         )
-        if requires_stroman and stroman_player is None:
+        if requires_stroman and auto_stroman:
+            cleaned_data["stroman_player"] = None
+        elif requires_stroman and stroman_player is None:
             self.add_error(
                 "stroman_player",
                 "Kies de speler die de stroman speelt.",

@@ -11,6 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
@@ -86,6 +87,20 @@ class LegacyImportTests(TestCase):
         self.assertEqual(parsed[0]["matches"][-1]["players"][1]["scores_180"], 1)
         self.assertEqual(parsed[0]["matches"][9]["players"][0]["high_finishes"], "74")
         self.assertEqual(parsed[1]["matches"][6]["players"][0]["least_darts"], "15")
+        with TemporaryDirectory() as temporary_directory:
+            unmarked_path = Path(temporary_directory) / "speeldag3__04-09-2026.txt"
+            source = (self.source_dir / "speeldag1__04-09-2026.txt").read_bytes()
+            unmarked_path.write_bytes(source.replace(b"Mario Loman *", b"Mario Loman"))
+            unmarked = parse_legacy_file(unmarked_path)
+        self.assertEqual(unmarked["stroman"], "Mario Loman")
+        self.assertEqual(
+            sum(
+                player["is_stroman"]
+                for match in unmarked["matches"]
+                for player in match["players"]
+            ),
+            1,
+        )
 
     def test_legacy_import_creates_complete_season_history_without_duplicate_imports(self):
         call_command(
@@ -101,7 +116,7 @@ class LegacyImportTests(TestCase):
             "2026-09-04",
             "2026-10-02",
         ])
-        self.assertEqual(Player.objects.count(), 31)
+        self.assertEqual(Player.objects.count(), 30)
         for evening in evenings:
             self.assertEqual(evening.attendances.count(), 25)
             self.assertEqual(evening.match_count, 5)
@@ -166,19 +181,29 @@ class LegacyImportTests(TestCase):
                 stroman_matches = [
                     match
                     for match in matches
-                    if "stroman" in (match["player1"], match["player2"])
+                    if match.get("stroman_player") is not None
                 ]
                 if player_count % 2:
                     self.assertEqual(len(stroman_matches), 1)
                     self.assertEqual(matches[-1], stroman_matches[0])
+                    self.assertTrue(
+                        all(
+                            isinstance(player, int)
+                            for player in (
+                                stroman_matches[0]["player1"],
+                                stroman_matches[0]["player2"],
+                            )
+                        )
+                    )
                 else:
                     self.assertEqual(stroman_matches, [])
 
-    def test_selected_player_gets_the_final_stroman_match(self):
+    def test_selected_player_is_the_real_opponent_in_final_stroman_match(self):
         matches = generate_schedule(15, 4, stroman_player=6)
 
-        self.assertEqual(matches[-1]["player1"], 6)
-        self.assertEqual(matches[-1]["player2"], "stroman")
+        self.assertNotEqual(matches[-1]["player1"], 6)
+        self.assertEqual(matches[-1]["player2"], 6)
+        self.assertEqual(matches[-1]["stroman_player"], 6)
 
     def test_schedule_counts_round_fill_and_referee_balance(self):
         for player_count, requested_boards in (
@@ -202,7 +227,25 @@ class LegacyImportTests(TestCase):
                     for player in (match["player1"], match["player2"])
                     if isinstance(player, int)
                 )
-                self.assertEqual(set(appearances.values()), {5})
+                regular_appearances = Counter(
+                    player
+                    for match in matches
+                    for player in (match["player1"], match["player2"])
+                    if isinstance(player, int)
+                    and player != match.get("stroman_player")
+                )
+                regular_appearances = Counter(
+                    player
+                    for match in matches
+                    for player in (match["player1"], match["player2"])
+                    if isinstance(player, int)
+                    and player != match.get("stroman_player")
+                )
+                self.assertEqual(set(regular_appearances.values()), {5})
+                if player_count % 2:
+                    self.assertEqual(sorted(appearances.values()), [5] * (player_count - 1) + [6])
+                else:
+                    self.assertEqual(set(appearances.values()), {5})
 
                 round_matches = defaultdict(list)
                 previous_games = {}
@@ -217,16 +260,20 @@ class LegacyImportTests(TestCase):
                         match["player2"],
                     )
 
-                round_sizes = [
-                    len(games) for games in round_matches.values()
+                regular_round_sizes = [
+                    sum(match.get("stroman_player") is None for match in games)
+                    for games in round_matches.values()
+                    if any(match.get("stroman_player") is None for match in games)
                 ]
-                expected_remainder = expected_match_count % active_boards
+                expected_remainder = (
+                    expected_match_count - (player_count % 2)
+                ) % active_boards
                 if expected_remainder:
-                    self.assertEqual(round_sizes.count(expected_remainder), 1)
+                    self.assertEqual(regular_round_sizes.count(expected_remainder), 1)
                 self.assertTrue(
                     all(
                         size == active_boards or size == expected_remainder
-                        for size in round_sizes
+                        for size in regular_round_sizes
                     )
                 )
                 for games in round_matches.values():
@@ -256,12 +303,12 @@ class LegacyImportTests(TestCase):
                 stroman_indices = [
                     index
                     for index, match in enumerate(matches)
-                    if "stroman" in (match["player1"], match["player2"])
+                    if match.get("stroman_player") is not None
                 ]
                 if player_count % 2:
                     self.assertTrue(stroman_indices)
-                    self.assertEqual(stroman_indices, list(range(stroman_indices[0], len(matches))))
-                    self.assertEqual(matches[-1]["player2"], "stroman")
+                    self.assertEqual(stroman_indices, [len(matches) - 1])
+                    self.assertEqual(matches[-1]["player2"], matches[-1]["stroman_player"])
                 else:
                     self.assertFalse(stroman_indices)
 
@@ -316,6 +363,13 @@ class LegacyImportTests(TestCase):
                     for player in (match["player1"], match["player2"])
                     if isinstance(player, int)
                 )
+                regular_appearances = Counter(
+                    player
+                    for match in matches
+                    for player in (match["player1"], match["player2"])
+                    if isinstance(player, int)
+                    and player != match.get("stroman_player")
+                )
                 round_players = defaultdict(list)
                 for match in matches:
                     round_players[match["round"]].extend(
@@ -323,7 +377,14 @@ class LegacyImportTests(TestCase):
                         for player in (match["player1"], match["player2"])
                         if isinstance(player, int)
                     )
-                self.assertEqual(set(appearances.values()), {match_count})
+                self.assertEqual(set(regular_appearances.values()), {match_count})
+                if player_count % 2 and match_count % 2:
+                    self.assertEqual(
+                        sorted(appearances.values()),
+                        [match_count] * (player_count - 1) + [match_count + 1],
+                    )
+                else:
+                    self.assertEqual(set(appearances.values()), {match_count})
                 self.assertEqual(
                     len(matches),
                     (player_count * match_count + player_count % 2) // 2,
@@ -641,18 +702,92 @@ class CompetitionFlowTests(TestCase):
         self.assertEqual(regular_stat.bonus_points, 15)
         self.assertEqual(regular_stat.points, 17)
 
-        stroman_match = self.evening.matches.filter(player2__isnull=True).first()
+        stroman_match = self.evening.matches.filter(stats__is_stroman=True).first()
         stroman_stat = MatchPlayerStats.objects.get(
             match=stroman_match,
-            player=stroman_match.player1,
+            is_stroman=True,
         )
-        stroman_stat.legs_won = 3
+        stroman_stat.legs_won = 2
         stroman_stat.scores_180 = 1
         stroman_stat.scores_171 = 1
         stroman_stat.high_finishes = "100, 170"
         stroman_stat.save()
+        opponent_stat = MatchPlayerStats.objects.exclude(
+            player_id=stroman_stat.player_id
+        ).get(match=stroman_match)
+        opponent_stat.legs_won = 1
+        opponent_stat.save()
         self.assertEqual(stroman_stat.bonus_points, 5)
         self.assertEqual(stroman_stat.points, 5)
+        stroman_rows = build_standings(
+            [record.player for record in self.evening.attendances.select_related("player")],
+            list(
+                self.evening.matches.select_related(
+                    "player1", "player2", "referee"
+                ).prefetch_related("stats")
+            ),
+        )
+        stroman_row = next(
+            row for row in stroman_rows if row["player"].id == stroman_stat.player_id
+        )
+        self.assertEqual(stroman_row["matches_played"], 0)
+        self.assertEqual(stroman_row["wins"], 0)
+        self.assertEqual(stroman_row["losses"], 0)
+        self.assertEqual(stroman_row["legs_for"], 0)
+        self.assertEqual(stroman_row["legs_against"], 0)
+        self.assertEqual(stroman_row["points"], 5)
+        self.assertEqual(stroman_row["scores_180"], 1)
+
+    def test_regular_match_stroman_stats_keep_throws_but_not_competitive_counts(self):
+        original_stroman = self.evening.matches.get(stats__is_stroman=True)
+        original_stroman_id = original_stroman.stats.get(is_stroman=True).player_id
+        match = (
+            self.evening.matches.filter(player2__isnull=False)
+            .exclude(player1_id=original_stroman_id)
+            .exclude(player2_id=original_stroman_id)
+            .first()
+        )
+        stroman_stat = MatchPlayerStats.objects.get(
+            match=match,
+            player=match.player1,
+        )
+        stroman_stat.is_stroman = True
+        stroman_stat.legs_won = 2
+        stroman_stat.scores_180 = 1
+        stroman_stat.save()
+        opponent_stat = MatchPlayerStats.objects.get(
+            match=match,
+            player=match.player2,
+        )
+        opponent_stat.legs_won = 1
+        opponent_stat.save()
+
+        rows = build_standings(
+            [record.player for record in self.evening.attendances.select_related("player")],
+            list(
+                self.evening.matches.select_related(
+                    "player1", "player2", "referee"
+                ).prefetch_related("stats")
+            ),
+        )
+        stroman_row = next(
+            row for row in rows if row["player"].id == stroman_stat.player_id
+        )
+        opponent_row = next(
+            row for row in rows if row["player"].id == opponent_stat.player_id
+        )
+
+        self.assertEqual(stroman_row["matches_played"], 0)
+        self.assertEqual(stroman_row["wins"], 0)
+        self.assertEqual(stroman_row["losses"], 0)
+        self.assertEqual(stroman_row["legs_for"], 0)
+        self.assertEqual(stroman_row["legs_against"], 0)
+        self.assertEqual(stroman_row["points"], 1)
+        self.assertEqual(stroman_row["scores_180"], 1)
+        self.assertEqual(opponent_row["matches_played"], 1)
+        self.assertEqual(opponent_row["losses"], 1)
+        self.assertEqual(opponent_row["legs_for"], 1)
+        self.assertEqual(opponent_row["legs_against"], 2)
 
     def test_new_evening_form_creates_schedule_in_draw_order(self):
         selected_players = [self.players[number] for number in (4, 2, 8, 0)]
@@ -707,7 +842,7 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "kan geen geldig schema worden gemaakt")
         self.assertFalse(Evening.objects.filter(date="2026-11-03").exists())
 
-    def test_stroman_player_is_required_and_used_for_odd_evening(self):
+    def test_manual_stroman_is_used_for_odd_evening(self):
         selected_players = self.players[:5]
         data = {
             "season": self.season.id,
@@ -730,8 +865,11 @@ class CompetitionFlowTests(TestCase):
         evening = Evening.objects.get(date="2026-11-02")
         self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
         final_match = evening.matches.order_by("-number").first()
-        self.assertTrue(final_match.is_phantom_match)
-        self.assertEqual(final_match.player1_id, stroman.id)
+        self.assertFalse(final_match.is_phantom_match)
+        self.assertEqual(final_match.player2_id, stroman.id)
+        self.assertTrue(
+            MatchPlayerStats.objects.get(match=final_match, player=stroman).is_stroman
+        )
         self.assertEqual(
             evening.matches.count(),
             13,
@@ -746,13 +884,19 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertEqual(stroman_row["matches"], 5)
         self.assertEqual(stroman_row["stroman_matches"], 1)
+        standing_row = next(
+            row
+            for row in response.context["standings"]
+            if row["player"].id == stroman.id
+        )
+        self.assertEqual(standing_row["matches_scheduled"], 5)
         self.assertFalse(
             any(
                 stroman.id in {match.player1_id, match.player2_id}
                 for match in evening.matches.filter(
                     round_number=final_match.round_number,
                     player2__isnull=False,
-                )
+                ).exclude(pk=final_match.pk)
             )
         )
         response = self.client.post(
@@ -760,7 +904,40 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
         final_match = evening.matches.order_by("-number").first()
-        self.assertEqual(final_match.player1_id, stroman.id)
+        self.assertEqual(final_match.player2_id, stroman.id)
+
+    def test_automatic_stroman_lottery_selects_a_previous_player(self):
+        selected_players = self.players[:5]
+        response = self.client.post(
+            reverse("new_evening"),
+            {
+                "season": self.season.id,
+                "date": "03/11/2026",
+                "board_count": "2",
+                "match_count": "5",
+                "players": [str(player.id) for player in selected_players],
+                "draw_order": json.dumps([player.id for player in selected_players]),
+                "auto_stroman": "on",
+            },
+        )
+
+        evening = Evening.objects.get(date="2026-11-03")
+        self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
+        final_match = evening.matches.order_by("-number").first()
+        stroman_stat = MatchPlayerStats.objects.get(match=final_match, is_stroman=True)
+        self.assertEqual(final_match.player2_id, stroman_stat.player_id)
+        self.assertNotEqual(final_match.player1_id, stroman_stat.player_id)
+        self.assertTrue(
+            evening.matches.filter(
+                stats__player_id=stroman_stat.player_id,
+                stats__is_stroman=False,
+            ).exclude(pk=final_match.pk).exists()
+        )
+        appearances = (
+            evening.matches.filter(player1_id=stroman_stat.player_id).count()
+            + evening.matches.filter(player2_id=stroman_stat.player_id).count()
+        )
+        self.assertEqual(appearances, 6)
 
     def test_evening_form_lists_active_players_as_unchecked_options(self):
         response = self.client.get(reverse("new_evening"))
@@ -769,6 +946,13 @@ class CompetitionFlowTests(TestCase):
             self.assertContains(response, player.name)
         self.assertContains(response, "name=\"players\"")
         self.assertContains(response, "id_draw_order")
+        self.assertContains(response, 'name="auto_stroman"')
+        self.assertContains(response, "Stroman loting auto")
+        self.assertTrue(response.context["form"]["auto_stroman"].value())
+        self.assertEqual(response.context["form"]["date"].value(), timezone.localdate())
+        date_widget_attrs = response.context["form"]["date"].field.widget.attrs
+        self.assertNotIn("readonly", date_widget_attrs)
+        self.assertNotIn("disabled", date_widget_attrs)
         self.assertContains(response, "Aanwezige spelers")
         self.assertContains(response, 'placeholder="dd/MM/yyyy"')
         self.assertContains(response, 'id="board-capacity-note"')
@@ -855,6 +1039,28 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "Minste pijlen per leg")
         self.assertContains(response, "Scheidsbeurten")
 
+    def test_stroman_match_is_visible_but_not_counted_in_player_history(self):
+        match = self.evening.matches.filter(stats__is_stroman=True).first()
+        stat = MatchPlayerStats.objects.get(match=match, is_stroman=True)
+        stat.legs_won = 3
+        stat.save()
+
+        response = self.client.get(reverse("player_detail", args=[stat.player_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["played_count"], 0)
+        self.assertEqual(response.context["opponents"], [])
+        stroman_row = next(
+            row
+            for row in response.context["matches"]
+            if row["match"].id == match.id
+        )
+        self.assertIsNotNone(stroman_row["opponent"])
+        self.assertEqual(stroman_row["opponent"].id, match.player1_id)
+        self.assertTrue(stroman_row["is_stroman"])
+        self.assertContains(response, "Speelt stroman")
+        self.assertNotContains(response, "virtuele tegenstander")
+
     def test_player_names_link_to_player_overview_from_roster_and_standings(self):
         player = self.players[0]
 
@@ -917,7 +1123,14 @@ class CompetitionFlowTests(TestCase):
     def test_evening_has_five_games_per_player_and_one_stroman_match(self):
         matches = list(self.evening.matches.all())
         self.assertEqual(len(matches), 38)
-        self.assertEqual(sum(match.is_phantom_match for match in matches), 1)
+        self.assertEqual(sum(match.is_phantom_match for match in matches), 0)
+        self.assertEqual(
+            MatchPlayerStats.objects.filter(
+                match__evening=self.evening,
+                is_stroman=True,
+            ).count(),
+            1,
+        )
         self.assertEqual(self.evening.attendances.count(), 15)
         for match in matches:
             self.assertGreaterEqual(match.board, 1)
@@ -1122,7 +1335,18 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "maximaal drie legs")
 
     def test_phantom_match_result_form_shows_one_player_row(self):
-        match = self.evening.matches.filter(player2__isnull=True).first()
+        match = Match.objects.create(
+            evening=self.evening,
+            number=39,
+            round_number=self.evening.matches.order_by("-round_number").first().round_number + 1,
+            board=1,
+            player1=self.players[0],
+        )
+        MatchPlayerStats.objects.create(
+            match=match,
+            player=self.players[0],
+            is_stroman=True,
+        )
         response = self.client.get(reverse("edit_match", args=[match.id]))
 
         self.assertEqual(response.status_code, 200)
@@ -1148,6 +1372,7 @@ class CompetitionFlowTests(TestCase):
         self.assertTrue(
             all(row["matches_scheduled"] == 5 for row in response.context["standings"])
         )
+        self.assertContains(response, "Speelt stroman")
         self.assertTrue(
             all(row["points_progress"] == 0 for row in response.context["standings"])
         )

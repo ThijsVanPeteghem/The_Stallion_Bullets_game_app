@@ -15,7 +15,7 @@ from .services import (
     season_standings,
     sort_standings_for_ranking,
 )
-from .schedule import ScheduleError, expected_match_count
+from .schedule import ScheduleError, StromanSelectionError, expected_match_count
 
 
 def home(request):
@@ -66,7 +66,11 @@ def player_detail(request, player_id):
         opponent_stats = next(
             (stat for stat in stats if opponent and stat.player_id == opponent.id), None
         )
-        if complete:
+        if (
+            complete
+            and not match.is_phantom_match
+            and not (player_stats and player_stats.is_stroman)
+        ):
             played_count += 1
             if opponent:
                 opponent_counts[opponent] += 1
@@ -171,6 +175,9 @@ def new_evening(request):
                 players=form.cleaned_data["ordered_players"],
                 stroman_player=form.cleaned_data.get("stroman_player"),
             )
+        except StromanSelectionError as error:
+            form.add_error("stroman_player", str(error))
+            return render(request, "bullets/new_evening.html", {"form": form})
         except ScheduleError:
             form.add_error(
                 None,
@@ -202,9 +209,18 @@ def _evening_context(evening):
         for player_id in (match.player1_id, match.player2_id)
         if player_id is not None
     )
+    stroman_match_counts = Counter(
+        stat.player_id
+        for match in matches
+        for stat in match.stats.all()
+        if stat.is_stroman
+    )
     max_points = max((row["points"] for row in standings), default=0)
     for row in standings:
-        scheduled_count = match_counts[row["player"].id]
+        scheduled_count = (
+            match_counts[row["player"].id]
+            - stroman_match_counts[row["player"].id]
+        )
         row["matches_scheduled"] = scheduled_count
         row["points_progress"] = (
             round(row["points"] * 100 / max_points)
@@ -216,12 +232,6 @@ def _evening_context(evening):
             if scheduled_count > 0
             else 0
         )
-    stroman_match_counts = Counter(
-        stat.player_id
-        for match in matches
-        for stat in match.stats.all()
-        if stat.is_stroman
-    )
     expected_stroman_matches = int(
         len(players) % 2 == 1 and evening.match_count % 2 == 1
     )
@@ -270,12 +280,9 @@ def _evening_context(evening):
                 and stroman_match_is_last
                 and all(
                     match_counts[attendance.player_id]
-                    == (
-                        evening.match_count + 1
-                        if stroman_match_counts[attendance.player_id]
-                        and match_counts[attendance.player_id] > evening.match_count
-                        else evening.match_count
-                    )
+                    - stroman_match_counts[attendance.player_id]
+                    == evening.match_count
+                    and stroman_match_counts[attendance.player_id] <= 1
                     for attendance in attendances
                 )
                 and rounds_valid
@@ -284,15 +291,13 @@ def _evening_context(evening):
         "match_audit": [
             {
                 "attendance": attendance,
-                "matches": match_counts[attendance.player_id],
+                "matches": (
+                    match_counts[attendance.player_id]
+                    - stroman_match_counts[attendance.player_id]
+                ),
                 "stroman_matches": stroman_match_counts[attendance.player_id],
                 "referees": referee_counts[attendance.player_id],
-                "expected_matches": (
-                    evening.match_count + 1
-                    if stroman_match_counts[attendance.player_id]
-                    and match_counts[attendance.player_id] > evening.match_count
-                    else evening.match_count
-                ),
+                "expected_matches": evening.match_count,
             }
             for attendance in attendances
         ],
@@ -389,7 +394,7 @@ def print_evening(request, evening_id):
         for player in players:
             stat = stats_by_player.get(player.id) if player else None
             player_rows.append({
-                "player": player if player else "Stroman",
+                "player": player if player else "Stroman (virtuele tegenstander)",
                 "legs_won": stat.legs_won if stat else None,
                 "is_stroman": bool(stat and stat.is_stroman),
                 "scores_171": (stat.scores_171 or None) if stat else None,
