@@ -252,6 +252,7 @@ def _rank_season_standings(attendances, matches):
         key=lambda row: (
             -row["points"],
             row["matches_played"],
+            -row["wins"],
             -row["legs_balance"],
             -(row["highest_finish"] or 0),
             -row["scores_180"],

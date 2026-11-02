@@ -144,6 +144,7 @@ def parse_legacy_file(path):
     matches = []
     current = None
     awaiting_second_player = False
+    block_round_counts = Counter()
 
     def finish_match():
         if current is None:
@@ -175,7 +176,8 @@ def parse_legacy_file(path):
                 )
             current = {
                 "number": int(match_header.group(1)),
-                "round_number": int(round_match.group(1)),
+                "player_round_number": int(round_match.group(1)),
+                "round_number": None,
                 "board": None,
                 "players": [],
                 "referee": None,
@@ -192,6 +194,8 @@ def parse_legacy_file(path):
                 raise LegacyImportError(
                     f"{path.name}:{line_number}: ongeldig bloknummer."
                 ) from error
+            block_round_counts[current["board"]] += 1
+            current["round_number"] = block_round_counts[current["board"]]
             current["players"].append(
                 _parse_player(
                     fields,
@@ -290,6 +294,7 @@ def parse_legacy_file(path):
         )
 
     round_players = {}
+    player_round_players = {}
     for item in matches:
         used = round_players.setdefault(item["round_number"], set())
         participants = {player["name"] for player in item["players"]}
@@ -298,6 +303,15 @@ def parse_legacy_file(path):
                 f"{path.name}: een speler komt meerdere keren voor in ronde {item['round_number']}."
             )
         used.update(participants)
+        used_player_round = player_round_players.setdefault(
+            item["player_round_number"], set()
+        )
+        if used_player_round.intersection(participants):
+            raise LegacyImportError(
+                f"{path.name}: een speler komt meerdere keren voor in spelersronde "
+                f"{item['player_round_number']}."
+            )
+        used_player_round.update(participants)
 
     return {
         "date": date,

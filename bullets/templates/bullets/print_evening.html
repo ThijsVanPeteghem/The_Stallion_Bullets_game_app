@@ -30,11 +30,12 @@
       <span>Datum: <b>{{ evening.date|date:"d/m/Y" }}</b></span>
     </div>
     <table class="slip-table">
-      <thead><tr><th>Speler</th><th>Legs<br>gewonnen</th><th>171</th><th>180</th><th>HF<br>(finishwaarde)</th><th>MP<br>(pijlen)</th></tr></thead>
+      <thead><tr><th>Speler</th><th>Spelersronde</th><th>Legs<br>gewonnen</th><th>171</th><th>180</th><th>HF<br>(finishwaarde)</th><th>MP<br>(pijlen)</th></tr></thead>
       <tbody>
         {% for row in item.player_rows %}
         <tr>
           <th>{{ row.player }}{% if row.is_stroman %} · Stroman{% endif %}</th>
+          <td>{{ row.player_round|default_if_none:"—" }}</td>
           <td>{{ row.legs_won|default_if_none:"" }}</td>
           <td>{{ row.scores_171|default_if_none:"" }}</td>
           <td>{{ row.scores_180|default_if_none:"" }}</td>

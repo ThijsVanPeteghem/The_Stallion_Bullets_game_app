@@ -12,54 +12,91 @@ class StromanSelectionError(ScheduleError):
     pass
 
 
+class _ScheduledPair:
+    def __init__(self, players, player_rounds):
+        self.players = tuple(players)
+        self.player_rounds = player_rounds
+
+    def __iter__(self):
+        return iter(self.players)
+
+    def __getitem__(self, index):
+        return self.players[index]
+
+    def __len__(self):
+        return len(self.players)
+
+
 def expected_match_count(player_count, match_count):
     return (player_count * match_count + 1) // 2
 
 
 def _pairings(player_count, match_count=5, unmatched_player=0):
-    if player_count % 2:
-        edges = []
-        for offset in range(1, match_count // 2 + 1):
-            offset %= player_count
-            if offset == 0:
-                offset = 1
-            for player in range(player_count):
-                edges.append(
-                    tuple(sorted((player, (player + offset) % player_count)))
-                )
-
-        if match_count % 2:
-            half = (player_count - 1) // 2
-            available_players = [
-                (unmatched_player + offset) % player_count
-                for offset in range(1, player_count)
-            ]
-            edges.extend(
-                (available_players[index], available_players[index + half])
-                for index in range(half)
-            )
-            edges.append((unmatched_player, "stroman"))
-        return edges
-
-    participant_count = player_count + player_count % 2
+    has_bye = player_count % 2 == 1
+    ghost = player_count if has_bye else None
+    participant_count = player_count + int(has_bye)
     circle = list(range(participant_count))
     round_count = participant_count - 1
     factors = []
 
     for _ in range(round_count):
         games = []
+        bye = None
         for index in range(participant_count // 2):
             left = circle[index]
             right = circle[participant_count - 1 - index]
-            games.append(tuple(sorted((left, right))))
-        factors.append(games)
+            if ghost in (left, right):
+                bye = right if left == ghost else left
+            else:
+                games.append(tuple(sorted((left, right))))
+        factors.append((games, bye))
         circle = [circle[0], circle[-1], *circle[1:-1]]
 
-    return [
-        game
-        for round_number in range(match_count)
-        for game in factors[round_number % round_count]
+    start = 0
+    if has_bye and match_count % 2:
+        start = next(
+            offset
+            for offset in range(round_count)
+            if factors[(offset + match_count - 1) % round_count][1]
+            == unmatched_player
+        )
+    elif not has_bye:
+        start = unmatched_player % round_count
+
+    selected_factors = [
+        factors[(start + round_index) % round_count]
+        for round_index in range(match_count)
     ]
+    pairs = []
+    for pair_start in range(0, match_count, 2):
+        first_round = pair_start + 1
+        first_games, first_bye = selected_factors[pair_start]
+        pairs.extend(
+            _ScheduledPair(game, {player: first_round for player in game})
+            for game in first_games
+        )
+        if pair_start + 1 < match_count:
+            second_round = first_round + 1
+            second_games, second_bye = selected_factors[pair_start + 1]
+            if has_bye:
+                pairs.append(
+                    _ScheduledPair(
+                        tuple(sorted((first_bye, second_bye))),
+                        {first_bye: first_round, second_bye: second_round},
+                    )
+                )
+            pairs.extend(
+                _ScheduledPair(game, {player: second_round for player in game})
+                for game in second_games
+            )
+        elif has_bye:
+            pairs.append(
+                _ScheduledPair(
+                    (first_bye, "stroman"),
+                    {first_bye: first_round, "stroman": first_round + 1},
+                )
+            )
+    return pairs
 
 
 def _select_disjoint_games(games, count, rng):
@@ -131,10 +168,31 @@ def _pick_wave(
     previous_games,
     referee_counts,
     rng,
+    appearance_counts=None,
+    player_pool=None,
+    last_played_round=None,
+    current_round=1,
 ):
     target = min(board_count, len(edges))
     if target == 0:
         return []
+
+    def progress_penalty(game):
+        return sum(
+            max(
+                0,
+                player_round - (appearance_counts or {}).get(player, 0) - 1,
+            )
+            for player, player_round in getattr(game, "player_rounds", {}).items()
+        )
+
+    def wait_priority(game):
+        waits = [
+            current_round - (last_played_round or {}).get(player, 0)
+            for player in game
+            if isinstance(player, int)
+        ]
+        return -max(waits, default=0), -sum(waits)
 
     previous_players = {
         player
@@ -143,11 +201,82 @@ def _pick_wave(
         if isinstance(player, int)
     }
     attempts = 20 if len(edges) > 100 else 50
+    for penalty_limit in sorted({progress_penalty(game) for game in edges}):
+        eligible_edges = [
+            game for game in edges if progress_penalty(game) <= penalty_limit
+        ]
+        if len(eligible_edges) < target:
+            continue
+        for _ in range(attempts):
+            candidates = sorted(
+                eligible_edges,
+                key=lambda game: (
+                    *wait_priority(game),
+                    len(set(game) & previous_players),
+                    progress_penalty(game),
+                    sum(getattr(game, "player_rounds", {}).values()),
+                    max(
+                        (appearance_counts or {}).get(player, 0)
+                        for player in game
+                        if isinstance(player, int)
+                    ),
+                    sum(
+                        (appearance_counts or {}).get(player, 0)
+                        for player in game
+                        if isinstance(player, int)
+                    ),
+                    rng.random(),
+                ),
+            )
+            selected = []
+            playing = set()
+            for game in candidates:
+                participants = {player for player in game if isinstance(player, int)}
+                if participants & playing:
+                    continue
+                selected.append(game)
+                playing.update(participants)
+                if len(selected) == target:
+                    board_sets = (
+                        [tuple(range(board_count))]
+                        if target == board_count
+                        else list(combinations(range(board_count), target))
+                    )
+                    rng.shuffle(board_sets)
+                    for boards in board_sets:
+                        assignment = _assign_wave(
+                            list(boards),
+                            selected,
+                            previous_games,
+                            playing,
+                            referee_counts,
+                            rng,
+                        )
+                        if assignment is not None:
+                            return [
+                                (board, *assignment[board])
+                                for board in boards
+                            ]
+
+    all_players = tuple(
+        player_pool
+        if player_pool is not None
+        else sorted(
+            {
+                player
+                for game in edges
+                for player in game
+                if isinstance(player, int)
+            }
+        )
+    )
+    fallback_previous_games = [all_players] * board_count
     for _ in range(attempts):
         candidates = sorted(
             edges,
             key=lambda game: (
-                len(set(game) & previous_players),
+                *wait_priority(game),
+                progress_penalty(game),
                 rng.random(),
             ),
         )
@@ -170,12 +299,14 @@ def _pick_wave(
                     assignment = _assign_wave(
                         list(boards),
                         selected,
-                        previous_games,
+                        fallback_previous_games,
                         playing,
                         referee_counts,
                         rng,
                     )
                     if assignment is not None:
+                        for game in selected:
+                            game.referee_fallback = True
                         return [
                             (board, *assignment[board])
                             for board in boards
@@ -210,16 +341,17 @@ def _generate_schedule_once(
 
     # Reserve a final full round to seed first-round referees. The bye match
     # joins the final partial wave when that leaves an unused board.
-    if player_count % 2 == 0:
-        factor_size = player_count // 2
-        factors = [
-            real_pairs[index:index + factor_size]
-            for index in range(0, len(real_pairs), factor_size)
-        ]
-        factor = rng.choice(factors)
-        final_round = rng.sample(factor, board_count)
-    else:
-        final_round = _select_disjoint_games(real_pairs, board_count, rng)
+    final_factor = [
+        game
+        for game in real_pairs
+        if all(
+            player_round == match_count
+            for player_round in game.player_rounds.values()
+        )
+    ]
+    if len(final_factor) < board_count:
+        raise ScheduleError("Er zijn onvoldoende wedstrijden in de laatste spelersronde.")
+    final_round = rng.sample(final_factor, board_count)
     rng.shuffle(real_pairs)
     reserved_games = Counter(final_round)
     remaining = []
@@ -230,6 +362,7 @@ def _generate_schedule_once(
             remaining.append(game)
     previous_games = list(final_round)
     referee_counts = Counter()
+    appearance_counts = Counter()
     matches = []
     round_number = 1
     last_partial_boards = set()
@@ -241,6 +374,7 @@ def _generate_schedule_once(
             previous_games,
             referee_counts,
             rng,
+            appearance_counts,
         )
         current_games = [None] * board_count
         for board, game, referee in wave:
@@ -252,8 +386,10 @@ def _generate_schedule_once(
                 "player1": game[0],
                 "player2": game[1],
                 "referee": referee,
+                "player_rounds": game.player_rounds.copy(),
             })
             referee_counts[referee] += 1
+            appearance_counts.update(player for player in game if isinstance(player, int))
             remaining.remove(game)
         for board, game in enumerate(current_games):
             if game is not None:
@@ -267,6 +403,7 @@ def _generate_schedule_once(
         previous_games,
         referee_counts,
         rng,
+        appearance_counts,
     )
     final_games = Counter(game for _, game, _ in final_wave)
     remaining = []
@@ -288,8 +425,10 @@ def _generate_schedule_once(
             "player1": game[0],
             "player2": game[1],
             "referee": referee,
+            "player_rounds": game.player_rounds.copy(),
         })
         referee_counts[referee] += 1
+        appearance_counts.update(player for player in game if isinstance(player, int))
         previous_games[board] = game
     round_number += 1
 
@@ -300,6 +439,7 @@ def _generate_schedule_once(
             previous_games,
             referee_counts,
             rng,
+            appearance_counts,
         )
         last_partial_boards = {board for board, _, _ in wave}
         for board, game, referee in wave:
@@ -310,8 +450,10 @@ def _generate_schedule_once(
                 "player1": game[0],
                 "player2": game[1],
                 "referee": referee,
+                "player_rounds": game.player_rounds.copy(),
             })
             referee_counts[referee] += 1
+            appearance_counts.update(player for player in game if isinstance(player, int))
             previous_games[board] = game
             remaining.remove(game)
         round_number += 1
@@ -357,8 +499,10 @@ def _generate_schedule_once(
             "player1": game[0],
             "player2": game[1],
             "referee": referee,
+            "player_rounds": game.player_rounds.copy(),
         })
         referee_counts[referee] += 1
+        appearance_counts.update(player for player in game if isinstance(player, int))
         previous_games[board] = game
         stroman_pairs.remove(game)
         if current_round == round_number:
@@ -375,6 +519,91 @@ def _generate_schedule_once(
         if playing.intersection(participants):
             raise ScheduleError("Een speler kan maar één wedstrijd per ronde spelen.")
         playing.update(participants)
+    return matches
+
+
+def _generate_progressive_schedule_once(
+    player_count,
+    requested_board_count,
+    match_count,
+    seed,
+    unmatched_player=0,
+):
+    rng = random.Random(seed)
+    remaining = _pairings(player_count, match_count, unmatched_player)
+    board_count = min(
+        requested_board_count,
+        max(1, player_count // 3),
+        max(1, len(remaining) // 2),
+    )
+    if board_count <= 0:
+        raise ScheduleError("Er zijn onvoldoende wedstrijden om scheidsrechters op elk bord te laten rouleren.")
+
+    previous_games = [tuple(range(player_count))] * board_count
+    referee_counts = Counter()
+    appearance_counts = Counter()
+    last_played_round = Counter()
+    matches = []
+    round_number = 1
+
+    while remaining:
+        ready_games = []
+        for game in remaining:
+            if "stroman" in game:
+                unmatched_player = game.player_rounds[game[0]]
+                is_ready = (
+                    appearance_counts[game[0]] == unmatched_player - 1
+                    and all(
+                        appearance_counts[player] >= match_count
+                        for player in range(player_count)
+                        if player != game[0]
+                    )
+                )
+            else:
+                is_ready = all(
+                    player_round
+                    <= appearance_counts[player] + 1
+                    for player, player_round in game.player_rounds.items()
+                )
+            if is_ready:
+                ready_games.append(game)
+        if not ready_games:
+            raise ScheduleError("Er is geen wedstrijd beschikbaar op de volgende spelersronde.")
+
+        wave = _pick_wave(
+            ready_games,
+            board_count,
+            previous_games,
+            referee_counts,
+            rng,
+            appearance_counts,
+            range(player_count),
+            last_played_round,
+            round_number,
+        )
+        for board, game, referee in wave:
+            match = {
+                "number": len(matches) + 1,
+                "round": round_number,
+                "board": board + 1,
+                "player1": game[0],
+                "player2": game[1],
+                "referee": referee,
+                "player_rounds": game.player_rounds.copy(),
+                "referee_fallback": getattr(game, "referee_fallback", False),
+            }
+            matches.append(match)
+            referee_counts[referee] += 1
+            appearance_counts.update(
+                player for player in game if isinstance(player, int)
+            )
+            last_played_round.update(
+                {player: round_number for player in game if isinstance(player, int)}
+            )
+            remaining.remove(game)
+            previous_games[board] = game
+        round_number += 1
+
     return matches
 
 
@@ -529,7 +758,7 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
             else (stroman_player + 1 + attempt % (player_count - 1)) % player_count
         )
         try:
-            schedule = _generate_schedule_once(
+            schedule = _generate_progressive_schedule_once(
                 player_count,
                 board_count,
                 match_count,
@@ -554,11 +783,30 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
         selected_stroman = stroman_player
         if stroman_match:
             unmatched_player = stroman_match["player1"]
+            matches_in_round = [
+                match
+                for match in schedule
+                if match["round"] == stroman_match["round"]
+                and match is not stroman_match
+            ]
+            playing_in_round = {
+                player
+                for match in matches_in_round
+                for player in (match["player1"], match["player2"])
+                if isinstance(player, int)
+            }
+            referees_in_round = {
+                match["referee"] for match in matches_in_round
+            }
+            referees_in_round.add(stroman_match["referee"])
             available_stromans = {
                 player
                 for match in schedule[:-1]
                 for player in (match["player1"], match["player2"])
-                if isinstance(player, int) and player != unmatched_player
+                if isinstance(player, int)
+                and player != unmatched_player
+                and player not in playing_in_round
+                and player not in referees_in_round
             }
             if selected_stroman is None:
                 if not available_stromans:
@@ -568,31 +816,12 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
                 )
             elif selected_stroman not in available_stromans:
                 continue
-            previous_games = {}
-            referee_counts = Counter()
-            for match in schedule[:-1]:
-                previous_games[match["board"]] = (
-                    match["player1"],
-                    match["player2"],
-                )
-                referee_counts[match["referee"]] += 1
-            referee_options = [
-                (referee_counts[referee], board, referee)
-                for board, previous_game in previous_games.items()
-                for referee in previous_game
-                if isinstance(referee, int)
-                and referee not in {unmatched_player, selected_stroman}
-            ]
-            if not referee_options:
-                continue
-            _, stroman_match["board"], stroman_match["referee"] = min(
-                referee_options
-            )
             stroman_match["player2"] = selected_stroman
             stroman_match["stroman_player"] = selected_stroman
-            stroman_match["round"] = max(match["round"] for match in schedule) + 1
+            stroman_match["player_rounds"][selected_stroman] = (
+                stroman_match["player_rounds"].pop("stroman")
+            )
 
-        schedule = _rebalance_referees(schedule, player_count)
         appearances = Counter(
             player
             for match in schedule
@@ -636,6 +865,26 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
             round_players.update(participants)
         if not rounds_valid:
             continue
+        chronological_rounds = Counter()
+        for match in sorted(
+            schedule,
+            key=lambda item: (item["round"], item["number"]),
+        ):
+            if any(
+                match["player_rounds"].get(player)
+                != chronological_rounds[player] + 1
+                for player in (match["player1"], match["player2"])
+                if isinstance(player, int)
+            ):
+                rounds_valid = False
+                break
+            chronological_rounds.update(
+                player
+                for player in (match["player1"], match["player2"])
+                if isinstance(player, int)
+            )
+        if not rounds_valid:
+            continue
         regular_matches = [
             match
             for match in schedule
@@ -647,17 +896,49 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
             rounds.setdefault(match["round"], []).append(match)
         referee_counts = Counter(match["referee"] for match in schedule)
         duties = [referee_counts.get(player, 0) for player in range(player_count)]
+        first_rounds = {
+            player: min(
+                match["round"]
+                for match in schedule
+                if player in (match["player1"], match["player2"])
+            )
+            for player in range(player_count)
+        }
+        block_rounds_by_player = {player: [] for player in range(player_count)}
+        for match in schedule:
+            for player in (match["player1"], match["player2"]):
+                if isinstance(player, int):
+                    block_rounds_by_player[player].append(match["round"])
+        empty_round_gaps = [
+            right - left - 1
+            for block_rounds in block_rounds_by_player.values()
+            for left, right in zip(block_rounds, block_rounds[1:])
+        ]
         partial_rounds = sum(len(matches) < min(board_count, player_count // 3) for matches in rounds.values())
         score = (
             max(0, partial_rounds - int(len(regular_matches) % min(board_count, player_count // 3) != 0)),
             sum(min(board_count, player_count // 3) - len(matches) for matches in rounds.values() if len(matches) < min(board_count, player_count // 3)),
+            max(first_rounds.values()),
+            sum(first_rounds.values()),
             max(duties) - min(duties),
             sum(count * count for count in duties),
+            max(empty_round_gaps, default=0),
+            sum(empty_round_gaps),
         )
         if best_score is None or score < best_score:
             best_schedule, best_score = schedule, score
             expected_spread = 1 if len(schedule) >= player_count else 0
-            if score[0] == 0 and score[2] <= expected_spread:
+            target_empty_gap = max(
+                0,
+                (player_count + 2 * min(board_count, player_count // 3) - 1)
+                // (2 * min(board_count, player_count // 3))
+                - 1,
+            )
+            if (
+                score[0] == 0
+                and score[2] <= expected_spread
+                and score[6] <= target_empty_gap
+            ):
                 break
 
     if best_schedule is None:

@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.management import call_command
@@ -17,6 +19,7 @@ from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
 from .schedule import expected_match_count, generate_schedule
 from .services import (
+    _rank_season_standings,
     build_standings,
     create_evening,
     season_standings,
@@ -84,6 +87,10 @@ class LegacyImportTests(TestCase):
         self.assertEqual([item["match_count"] for item in parsed], [5, 5])
         self.assertEqual([item["stroman"] for item in parsed], ["Mario Loman", "Tim De Neve"])
         self.assertEqual([len(item["players"]) for item in parsed], [25, 25])
+        self.assertEqual(parsed[0]["matches"][5]["player_round_number"], 1)
+        self.assertEqual(parsed[0]["matches"][5]["round_number"], 2)
+        self.assertEqual(parsed[0]["matches"][12]["round_number"], 3)
+        self.assertEqual(parsed[0]["matches"][-1]["round_number"], 13)
         self.assertEqual(parsed[0]["matches"][-1]["players"][1]["scores_180"], 1)
         self.assertEqual(parsed[0]["matches"][9]["players"][0]["high_finishes"], "74")
         self.assertEqual(parsed[1]["matches"][6]["players"][0]["least_darts"], "15")
@@ -121,6 +128,13 @@ class LegacyImportTests(TestCase):
             self.assertEqual(evening.attendances.count(), 25)
             self.assertEqual(evening.match_count, 5)
             self.assertEqual(evening.matches.count(), 63)
+            block_round_counts = Counter()
+            for match in evening.matches.order_by("number"):
+                block_round_counts[match.board] += 1
+                self.assertEqual(
+                    match.round_number,
+                    block_round_counts[match.board],
+                )
             self.assertEqual(evening.matches.filter(referee__isnull=False).count(), 63)
             self.assertEqual(evening.matches.first().stats.count(), 2)
             self.assertEqual(
@@ -242,6 +256,58 @@ class LegacyImportTests(TestCase):
                     and player != match.get("stroman_player")
                 )
                 self.assertEqual(set(regular_appearances.values()), {5})
+                player_rounds = defaultdict(list)
+                for match in matches:
+                    self.assertEqual(len(match["player_rounds"]), 2)
+                    for player, player_round in match["player_rounds"].items():
+                        player_rounds[player].append(player_round)
+                self.assertEqual(
+                    {
+                        player: sorted(rounds)
+                        for player, rounds in player_rounds.items()
+                    },
+                    {
+                        player: list(range(1, appearances[player] + 1))
+                        for player in range(player_count)
+                    },
+                )
+                scheduled_counts = Counter()
+                for match in sorted(
+                    matches,
+                    key=lambda item: (item["round"], item["number"]),
+                ):
+                    for player in (match["player1"], match["player2"]):
+                        if isinstance(player, int):
+                            scheduled_counts[player] += 1
+                            self.assertEqual(
+                                match["player_rounds"][player],
+                                scheduled_counts[player],
+                            )
+                cross_rounds = Counter(
+                    tuple(sorted(match["player_rounds"].values()))
+                    for match in matches
+                    if len(set(match["player_rounds"].values())) > 1
+                )
+                expected_cross_rounds = {}
+                if player_count % 2:
+                    expected_cross_rounds = {
+                        (round_number, round_number + 1): 1
+                        for round_number in range(1, 6, 2)
+                    }
+                    expected_cross_rounds[(5, 6)] = 1
+                self.assertEqual(dict(cross_rounds), expected_cross_rounds)
+                first_rounds = {
+                    player: min(
+                        match["round"]
+                        for match in matches
+                        if player in (match["player1"], match["player2"])
+                    )
+                    for player in range(player_count)
+                }
+                self.assertLessEqual(
+                    max(first_rounds.values()),
+                    (player_count + 2 * active_boards - 1) // (2 * active_boards),
+                )
                 if player_count % 2:
                     self.assertEqual(sorted(appearances.values()), [5] * (player_count - 1) + [6])
                 else:
@@ -254,7 +320,10 @@ class LegacyImportTests(TestCase):
                     round_matches[match["round"]].append(match)
                     referee_counts[match["referee"]] += 1
                     if match["board"] in previous_games:
-                        self.assertIn(match["referee"], previous_games[match["board"]])
+                        self.assertTrue(
+                            match["referee"] in previous_games[match["board"]]
+                            or match.get("referee_fallback")
+                        )
                     previous_games[match["board"]] = (
                         match["player1"],
                         match["player2"],
@@ -337,6 +406,21 @@ class LegacyImportTests(TestCase):
         self.assertTrue(
             all(len(players) == len(set(players)) for players in round_players.values())
         )
+
+    def test_large_roster_limits_empty_block_rounds_between_matches(self):
+        matches = generate_schedule(28, 5, 5)
+        rounds_by_player = defaultdict(list)
+        for match in matches:
+            for player in (match["player1"], match["player2"]):
+                if isinstance(player, int):
+                    rounds_by_player[player].append(match["round"])
+
+        longest_gap = max(
+            right - left - 1
+            for block_rounds in rounds_by_player.values()
+            for left, right in zip(block_rounds, block_rounds[1:])
+        )
+        self.assertLessEqual(longest_gap, 3)
 
     def test_custom_match_counts_give_every_player_the_requested_appearances(self):
         for player_count, requested_boards, match_count in (
@@ -623,8 +707,41 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "finish van 161, 164, 167 of 170")
         self.assertContains(response, "Stroman")
         self.assertContains(response, "Meeste punten")
+        self.assertContains(response, "Meeste gewonnen wedstrijden")
+        self.assertContains(response, "spelersronde")
         home_response = self.client.get(reverse("home"))
         self.assertContains(home_response, f'href="{reverse("rules")}">Spelregels</a>')
+
+    def test_evening_detail_shows_and_audits_player_rounds(self):
+        response = self.client.get(reverse("evening_detail", args=[self.evening.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<abbr title="Spelersronde">SR</abbr>')
+        self.assertContains(response, "Spelersronde nr.")
+        self.assertContains(response, "Wedstrijden per speler")
+        self.assertEqual(
+            response.context["player_progress_chart"]["block_rounds"][0],
+            0,
+        )
+        chart = response.context["player_progress_chart"]
+        self.assertEqual(len(chart["players"]), len(self.players))
+        self.assertContains(response, "Selecteer alles")
+        self.assertContains(response, "Deselecteer alles")
+        self.assertTrue(
+            all(
+                len(player["values"]) == len(chart["block_rounds"])
+                for player in chart["players"]
+            )
+        )
+        self.assertTrue(response.context["schedule_audit"]["player_rounds_valid"])
+        self.assertTrue(response.context["schedule_audit"]["valid"])
+        self.assertTrue(
+            all(
+                row["player_round_number"]
+                == row["matches"] + row["stroman_matches"]
+                for row in response.context["match_audit"]
+            )
+        )
 
     def test_season_standings_use_the_requested_tie_break_order(self):
         players_by_name = {
@@ -681,6 +798,42 @@ class CompetitionFlowTests(TestCase):
                 "Tiebreak A",
                 "Tiebreak C",
             ],
+        )
+
+    def test_season_standings_prioritize_wins_over_legs_balance(self):
+        more_wins = SimpleNamespace(name="Meer gewonnen")
+        better_balance = SimpleNamespace(name="Hoger legsaldo")
+        rows = [
+            {
+                "player": more_wins,
+                "points": 10,
+                "matches_played": 4,
+                "wins": 3,
+                "legs_balance": -2,
+                "highest_finish": 100,
+                "scores_180": 1,
+            },
+            {
+                "player": better_balance,
+                "points": 10,
+                "matches_played": 4,
+                "wins": 2,
+                "legs_balance": 8,
+                "highest_finish": 100,
+                "scores_180": 1,
+            },
+        ]
+        attendances = [
+            SimpleNamespace(player_id=index, player=row["player"])
+            for index, row in enumerate(rows, start=1)
+        ]
+
+        with patch("bullets.services.build_standings", return_value=rows):
+            standings = _rank_season_standings(attendances, [])
+
+        self.assertEqual(
+            [row["player"].name for row in standings],
+            ["Meer gewonnen", "Hoger legsaldo"],
         )
 
     def test_points_include_only_specified_bonus_events_and_not_stroman_legs(self):
@@ -822,7 +975,7 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertEqual(set(appearances.values()), {3})
 
-    def test_new_evening_reports_unavailable_schedule_without_creating_evening(self):
+    def test_new_evening_creates_a_valid_progressive_schedule_for_tight_capacity(self):
         selected_players = [*self.players, Player.objects.create(name="Speler 16")]
         draw_order = [player.id for player in selected_players]
 
@@ -838,9 +991,10 @@ class CompetitionFlowTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "kan geen geldig schema worden gemaakt")
-        self.assertFalse(Evening.objects.filter(date="2026-11-03").exists())
+        evening = Evening.objects.get(date="2026-11-03")
+        self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
+        audit_response = self.client.get(reverse("evening_detail", args=[evening.id]))
+        self.assertTrue(audit_response.context["schedule_audit"]["valid"])
 
     def test_manual_stroman_is_used_for_odd_evening(self):
         selected_players = self.players[:5]
@@ -1055,7 +1209,12 @@ class CompetitionFlowTests(TestCase):
         response = self.client.get(reverse("player_detail", args=[player.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context["matches"]), 5)
+        stroman_extra = MatchPlayerStats.objects.filter(
+            match__evening=self.evening,
+            player=player,
+            is_stroman=True,
+        ).exists()
+        self.assertEqual(len(response.context["matches"]), 5 + stroman_extra)
         self.assertEqual(response.context["played_count"], 1)
         self.assertEqual(response.context["opponents"], [(match.player2, 1)])
         self.assertEqual(response.context["totals"]["high_finishes"], 2)

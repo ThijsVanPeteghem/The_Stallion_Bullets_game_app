@@ -91,11 +91,15 @@ De afronding naar boven is nodig wanneer het product oneven is. De laatste parti
 ### Ronden, blokken en rust
 
 - Een speler speelt maximaal één wedstrijd per ronde.
+- De spelersronde komt uit round-robinfactoren. Alle games uit een spelersronde worden ingepland voordat spelers naar hun volgende ronde gaan.
+- Bij een oneven spelersaantal speelt de bye van iedere twee opeenvolgende factoren één kruiswedstrijd. In de oneven laatste spelersronde speelt de overblijver tegen de stroman.
+- Iedere wedstrijd bewaart per speler het persoonlijke spelersrondenummer; een kruiswedstrijd heeft daarom twee opeenvolgende nummers.
 - In een ronde speelt een scheidsrechter niet zelf in een wedstrijd van diezelfde ronde.
 - Binnen een ronde wordt een speler niet meer dan eenmaal als scheidsrechter toegewezen.
 - Het aantal werkelijk gebruikte blokken kan kleiner zijn dan het gevraagde aantal. De planner begrenst dat mede op basis van het aantal beschikbare spelers en wedstrijden; vraag dus niet aan een validatiepipeline om altijd precies het aangevraagde aantal blokken te zien.
 - De planner probeert ronden zo volledig mogelijk te vullen. Als het aantal wedstrijden niet deelbaar is door het bruikbare aantal blokken, kan de laatste ronde gedeeltelijk gevuld zijn.
-- Voor een geldige scheidsrechtertoewijzing gebruikt de planner de spelers van de vorige wedstrijd op hetzelfde blok als kandidaten. Daardoor is de scheidsrechterbeurt gekoppeld aan de blokroulatie.
+- Binnen geldige referee- en rondeconstraints geeft de planner voorrang aan spelers met de langste wachttijd en kiest hij schema's met kleinere lege blokrondengaten.
+- Voor een scheidsrechtertoewijzing gebruikt de planner bij voorkeur de spelers van de vorige wedstrijd op hetzelfde blok. Als daardoor geen geldige, gelijktijdig unieke toewijzing mogelijk is, kiest hij een andere aanwezige die niet in die blokrond speelt.
 - De planner probeert scheidsrechterbeurten evenwichtig over aanwezigen te verdelen. Tests verwachten in gecontroleerde gevallen maximaal één verschil tussen het hoogste en laagste aantal beurten; dit is een geteste uitkomst, geen garantie dat ieder denkbaar invoergeval identieke verdeling oplevert.
 - De planner probeert tegenstanders te variëren, maar herhaling is toegestaan en kan bij een kleine spelersgroep of veel wedstrijden voorkomen.
 - Exacte wedstrijden, bloknummers, ronden en loting zijn niet de stabiele interface. Valideer primair de invarianten hierboven, niet één willekeurige exacte planning.
@@ -105,11 +109,12 @@ De afronding naar boven is nodig wanneer het product oneven is. De laatste parti
 De Excel-voorbeelden gebruiken een herkenbaar cyclisch round-robinpatroon: per speeldag schuiven de tegenstanders door, zodat spelers zo veel mogelijk verschillende tegenstanders krijgen. De huidige planner gebruikt een vergelijkbare basis, maar reproduceert niet de vaste Excel-tabellen of hun exacte ronde-indeling.
 
 - Bij een even aantal spelers bouwt de planner eerst round-robinrondes met de circle method op. Bij meer gevraagde wedstrijden dan unieke rondes kunnen die pairings terugkomen.
-- Bij een oneven aantal spelers bouwt de planner pairings op basis van cyclische offsets. Als een speler overblijft, wordt die in de laatste reguliere wedstrijd gekoppeld aan een andere aanwezige die al eerder die avond speelde; die tegenstander is de stroman en speelt één extra wedstrijd.
-- Daarna schudt en verdeelt de planner de pairings opnieuw over speelrondes en dartsblokken. Daarbij houdt hij rekening met scheidsrechterbeschikbaarheid en -verdeling, blokroulatie en maximaal één wedstrijd per speler per ronde. Daardoor kunnen dezelfde basispairings in een andere ronde of op een ander blok terechtkomen dan in Excel.
+- Bij een even spelersaantal maakt de planner round-robinfactoren waarin iedere speler eenmaal per factor speelt.
+- Bij een oneven spelersaantal heeft iedere factor één bye. De byes uit twee opeenvolgende factoren spelen een kruiswedstrijd; een bye in de laatste oneven factor speelt tegen de stroman.
+- Daarna verdeelt de planner de pairings in blokrondes. Een volgende spelersronde begint pas nadat de voorafgaande persoonlijke wedstrijden zijn ingepland; referee-beschikbaarheid kan een speler soms laten scheidsrechteren in plaats van tegelijk spelen.
 - Het aantal gelijktijdige wedstrijden kan lager zijn dan in Excel. Zo begrenst de app bij 10 of 11 aanwezige spelers het aantal blokken voor het schema tot maximaal 3, ook als er meer blokken zijn gevraagd. De 10-spelerslijst met vijf gelijktijdige wedstrijden per ronde is dus geen exacte verwachting voor de app.
 - De app maakt voor 10 spelers met vijf wedstrijden per speler 25 wedstrijden; voor 11 spelers zijn dat 28 wedstrijden, inclusief één stromanwedstrijd. De verdeling over rondes volgt de beschikbare blokken en scheidsrechters, niet noodzakelijk de vijf plus één rondes uit het Excel-voorbeeld.
-- De stromanwedstrijd is de laatste wedstrijd in de gegenereerde planning. Door de indeling kan die op een ronde met nog vrije capaciteit terechtkomen of een extra ronde vormen.
+- De stromanwedstrijd is de laatste wedstrijd in de gegenereerde planning en valt binnen de laatste spelersronde.
 
 Kort gezegd: de round-robin-/rotatiegedachte is vergelijkbaar, maar de exacte tegenstanders per ronde en het aantal wedstrijden per ronde zijn niet gegarandeerd gelijk aan het oude Excel-schema. De extra planningsregels van de app zijn leidend.
 
@@ -118,6 +123,8 @@ Kort gezegd: de round-robin-/rotatiegedachte is vergelijkbaar, maar de exacte te
 De stroman is een echte aanwezige speler die al eerder die avond een reguliere wedstrijd speelde. De stroman wordt automatisch geloot of handmatig geselecteerd en speelt als extra tegenstander van de speler die anders zou overblijven. Beide echte spelers krijgen statistiekregels en kunnen uitslagen en worpen registreren.
 
 De laatste partij telt als reguliere wedstrijd voor de overblijver. Voor de stroman telt die niet als extra gespeelde wedstrijd en tellen diens legs niet mee voor punten, winst/verlies of legs voor/tegen. De stroman behoudt wel punten en statistieken voor 171/180-worpen en geldige finishes; pijlenstatistieken blijven eveneens meetellen. Bij import wordt de stroman afgeleid uit de speler met precies één extra optreden; die moet ook in de laatste partij staan. Een eventuele `*` in het bronbestand is een extra controle, geen vereiste.
+
+Bij de oude tekstbestanden betekent `RONDE` de persoonlijke spelersronde; `Blok` is het fysieke dartsblok. De geïmporteerde blokronden worden daarom per blok afgeleid uit de volgorde waarin dat blok voorkomt. Eerder geïmporteerde avonden met de oude mapping worden automatisch hersteld.
 
 ## 4. Uitslag- en statistiekregels
 
@@ -172,10 +179,11 @@ Seizoenstand bevat spelers die in ten minste één avond aanwezig waren. De sort
 
 1. punten aflopend;
 2. aantal gespeelde wedstrijden oplopend;
-3. legsaldo (legs voor minus legs tegen) aflopend;
-4. hoogste finish aflopend;
-5. aantal 180-worpen aflopend;
-6. naam hoofdletterongevoelig oplopend als laatste vaste volgorde bij volledige gelijkstand.
+3. gewonnen wedstrijden aflopend;
+4. legsaldo (legs voor minus legs tegen) aflopend;
+5. hoogste finish aflopend;
+6. aantal 180-worpen aflopend;
+7. naam hoofdletterongevoelig oplopend als laatste vaste volgorde bij volledige gelijkstand.
 
 De klassementlogica wordt geïmplementeerd in [bullets/services.py](./bullets/services.py); de kolommen worden getoond in [standings_table.html](./bullets/templates/bullets/standings_table.html).
 
@@ -239,7 +247,7 @@ Gebruik dit als functionele acceptatiechecklist. Een pipeline moet waar mogelijk
 - [ ] Een gewone wedstrijd accepteert uitsluitend legs die samen exact 3 zijn; beide waarden liggen tussen 0 en 3.
 - [ ] Punten zijn één per gewonnen leg (behalve in de stromanwedstrijd), één per 180 en 171, één per finish 100–160, en twee per finish 161/164/167/170.
 - [ ] 174- en 177-worpen worden niet ingevoerd/getoond en minste pijlen levert geen punten op.
-- [ ] Seizoenklassement sorteert op punten aflopend, wedstrijden oplopend, legsaldo aflopend, hoogste finish aflopend en aantal 180-worpen aflopend.
+- [ ] Seizoenklassement sorteert op punten aflopend, wedstrijden oplopend, gewonnen wedstrijden aflopend, legsaldo aflopend, hoogste finish aflopend en aantal 180-worpen aflopend.
 - [ ] Onvolledige wedstrijdgegevens tellen niet mee voor punten, matchen, legs, uitslagen of bonusstatistieken.
 - [ ] Alleen 180- en 171-worpen en de geldende high finishes leveren bonuspunten op.
 - [ ] Finishwaarden zijn 2–170; pijlenwaarden zijn 1–99 en maximaal drie per speler per wedstrijd. Alleen voorgeschreven finishes tellen als punten.

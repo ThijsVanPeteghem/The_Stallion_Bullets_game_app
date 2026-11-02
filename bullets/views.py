@@ -198,10 +198,65 @@ def _evening_context(evening):
     matches = list(
         evening.matches.select_related("player1", "player2", "referee")
         .prefetch_related("stats")
+        .order_by("number")
     )
     for match in matches:
         stroman_stats = [stat for stat in match.stats.all() if stat.is_stroman]
         match.stroman_player_id = stroman_stats[0].player_id if stroman_stats else None
+    last_block_round = max((match.round_number for match in matches), default=0)
+    progress_counts = Counter()
+    progress_values = {
+        attendance.player_id: [0]
+        for attendance in attendances
+    }
+    matches_by_block_round = {}
+    for match in matches:
+        matches_by_block_round.setdefault(match.round_number, []).append(match)
+    for block_round in range(1, last_block_round + 1):
+        for match in matches_by_block_round.get(block_round, []):
+            for player_id in (match.player1_id, match.player2_id):
+                if player_id is not None:
+                    progress_counts[player_id] += 1
+        for attendance in attendances:
+            progress_values[attendance.player_id].append(
+                progress_counts[attendance.player_id]
+            )
+    player_progress_chart = {
+        "block_rounds": list(range(last_block_round + 1)),
+        "max_matches": max(progress_counts.values(), default=0),
+        "players": [
+            {
+                "id": attendance.player_id,
+                "name": attendance.player.name,
+                "values": progress_values[attendance.player_id],
+            }
+            for attendance in attendances
+        ],
+    }
+    player_round_counts = Counter()
+    player_rounds_by_player = {}
+    player_round_overlaps = 0
+    player_round_gaps_valid = True
+    for match in matches:
+        match.player_rounds = {}
+        for player_id in (match.player1_id, match.player2_id):
+            if player_id is None:
+                continue
+            player_round_counts[player_id] += 1
+            match.player_rounds[player_id] = player_round_counts[player_id]
+            player_rounds_by_player.setdefault(player_id, []).append(
+                player_round_counts[player_id]
+            )
+        match.player1_player_round = match.player_rounds.get(match.player1_id)
+        match.player2_player_round = match.player_rounds.get(match.player2_id)
+        if len(match.player_rounds) == 2:
+            player_round_difference = abs(
+                match.player1_player_round - match.player2_player_round
+            )
+            player_round_overlaps += int(player_round_difference > 0)
+            player_round_gaps_valid = (
+                player_round_gaps_valid and player_round_difference <= 1
+            )
     standings = build_standings(players, matches, attendances)
     match_counts = Counter(
         player_id
@@ -251,6 +306,18 @@ def _evening_context(evening):
         len(players),
         evening.match_count,
     )
+    player_rounds_valid = all(
+        player_rounds_by_player.get(attendance.player_id, [])
+        == list(
+            range(
+                1,
+                evening.match_count
+                + stroman_match_counts[attendance.player_id]
+                + 1,
+            )
+        )
+        for attendance in attendances
+    )
     stroman_match_total = sum(stroman_match_counts.values())
     stroman_match_is_last = (
         not stroman_match_total
@@ -267,6 +334,7 @@ def _evening_context(evening):
         "evening": evening,
         "attendances": attendances,
         "matches": matches,
+        "player_progress_chart": player_progress_chart,
         "standings": standings,
         "complete_count": sum(match.is_complete for match in matches),
         "schedule_audit": {
@@ -274,6 +342,8 @@ def _evening_context(evening):
             "actual_matches": len(matches),
             "expected_stroman_matches": expected_stroman_matches,
             "actual_stroman_matches": stroman_match_total,
+            "player_round_overlaps": player_round_overlaps,
+            "player_rounds_valid": player_rounds_valid and player_round_gaps_valid,
             "valid": (
                 len(matches) == expected_total_matches
                 and stroman_match_total == expected_stroman_matches
@@ -286,6 +356,8 @@ def _evening_context(evening):
                     for attendance in attendances
                 )
                 and rounds_valid
+                and player_rounds_valid
+                and player_round_gaps_valid
             ),
         },
         "match_audit": [
@@ -298,6 +370,27 @@ def _evening_context(evening):
                 "stroman_matches": stroman_match_counts[attendance.player_id],
                 "referees": referee_counts[attendance.player_id],
                 "expected_matches": evening.match_count,
+                "player_round_number": max(
+                    player_rounds_by_player.get(attendance.player_id, []),
+                    default=0,
+                ),
+                "player_rounds": ", ".join(
+                    str(value)
+                    for value in player_rounds_by_player.get(
+                        attendance.player_id, []
+                    )
+                ),
+                "player_rounds_valid": (
+                    player_rounds_by_player.get(attendance.player_id, [])
+                    == list(
+                        range(
+                            1,
+                            evening.match_count
+                            + stroman_match_counts[attendance.player_id]
+                            + 1,
+                        )
+                    )
+                ),
             }
             for attendance in attendances
         ],
@@ -387,14 +480,21 @@ def print_evening(request, evening_id):
         .prefetch_related("stats")
     )
     print_matches = []
+    player_round_counts = Counter()
     for match in matches:
         stats_by_player = {stat.player_id: stat for stat in match.stats.all()}
         players = [match.player1, match.player2]
         player_rows = []
+        match.player_rounds = {}
+        for player_id in (match.player1_id, match.player2_id):
+            if player_id is not None:
+                player_round_counts[player_id] += 1
+                match.player_rounds[player_id] = player_round_counts[player_id]
         for player in players:
             stat = stats_by_player.get(player.id) if player else None
             player_rows.append({
                 "player": player if player else "Stroman (virtuele tegenstander)",
+                "player_round": match.player_rounds.get(player.id) if player else None,
                 "legs_won": stat.legs_won if stat else None,
                 "is_stroman": bool(stat and stat.is_stroman),
                 "scores_171": (stat.scores_171 or None) if stat else None,

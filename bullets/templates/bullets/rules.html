@@ -45,6 +45,7 @@
   <ol>
     <li>Meeste punten.</li>
     <li>Minste gespeelde wedstrijden.</li>
+    <li>Meeste gewonnen wedstrijden.</li>
     <li>Hoogste legsaldo (legs voor min legs tegen).</li>
     <li>Hoogste finish.</li>
     <li>Meeste 180-worpen.</li>
@@ -55,10 +56,13 @@
 
 <section class="panel">
   <h2>Speelschema</h2>
-  <p>De planner gebruikt een round-robin-/rotatiegedachte om tegenstanders te variëren, maar garandeert niet exact dezelfde ronde-indeling als het oude Excel-schema. Het aantal wedstrijden per speler, beschikbare dartsblokken, rust en scheidsrechterverdeling beïnvloeden de indeling.</p>
+  <p>De planner gebruikt round-robinfactoren en laat spelers eerst hun wedstrijden van een spelersronde afronden voordat de volgende spelersronde begint. De blokronde verdeelt wedstrijden over de beschikbare dartsblokken.</p>
   <ul>
     <li>Iedere speler krijgt het ingestelde aantal reguliere wedstrijden; alleen de stroman heeft daarnaast één extra deelname.</li>
     <li>Een speler speelt maximaal één wedstrijd per ronde.</li>
+    <li>Binnen geldige blok- en refereeplanning krijgen spelers met de langste wachttijd voorrang, zodat lege blokronden tussen wedstrijden beperkt blijven.</li>
+    <li>Bij een oneven aantal spelers speelt de bye van opeenvolgende round-robinrondes één kruiswedstrijd; daardoor kan die wedstrijd twee verschillende spelersrondenummers tonen.</li>
+    <li>In de laatste oneven spelersronde speelt de overblijver tegen de stroman.</li>
     <li>Een scheidsrechter speelt niet zelf in een wedstrijd van dezelfde ronde en wordt per ronde maximaal één keer toegewezen.</li>
     <li>De stromanwedstrijd is de laatste wedstrijd in de planning en gebruikt twee echte spelers.</li>
   </ul>

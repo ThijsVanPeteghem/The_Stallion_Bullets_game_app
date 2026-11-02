@@ -111,6 +111,19 @@ tbody tr:hover { background: #fdf9f8; }
 .standing-progress-cell .standing-progress { width: 72px; height: 7px; margin: 0; }
 .evening-standing-table th, .evening-standing-table td { padding: 6px 7px; }
 .evening-standing-table tbody tr { height: 40px; }
+.player-progress-chart-scroll { overflow-x: auto; }
+.player-progress-chart { display: block; width: 100%; min-width: 620px; height: auto; }
+.player-progress-chart .chart-grid { stroke: #e1e6ec; stroke-width: 1; }
+.player-progress-chart .chart-axis { stroke: #716966; stroke-width: 1; }
+.player-progress-chart .chart-label { fill: #716966; font: 12px "Segoe UI", Arial, sans-serif; }
+.player-progress-chart .chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.player-progress-chart .chart-point { stroke: white; stroke-width: 1.5; }
+.player-progress-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.player-progress-controls .button { padding: 6px 10px; font-size: 13px; }
+.player-progress-legend { display: flex; flex-wrap: wrap; gap: 5px 8px; margin-top: 12px; }
+.player-progress-legend button { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 4px 7px; border: 1px solid var(--line); border-radius: 4px; background: white; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
+.player-progress-legend button[aria-pressed="false"] { opacity: .48; }
+.player-progress-legend-swatch { width: 12px; height: 3px; flex: 0 0 auto; }
 .standings-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; }
 .standings-filter > div { flex: 1 1 240px; }
 .standings-filter label { margin-top: 0; }

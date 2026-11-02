@@ -1,4 +1,5 @@
 {% extends "bullets/base.html" %}
+{% load static %}
 {% block title %}{{ evening.date|date:"d/m/Y" }} | The Stallion Bullets{% endblock %}
 {% block content %}
 <p class="eyebrow"><a href="{% url 'season_detail' evening.season_id %}">{{ evening.season }}</a> · {{ evening.date|date:"d/m/Y" }}</p>
@@ -15,11 +16,12 @@
   <h2>Wedstrijdschema</h2>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th></th><th class="copy-only" style="display:none">Worpen, finishes en pijlen</th></tr></thead>
+    <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th><abbr title="Spelersronde">SR</abbr></th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th></th><th class="copy-only" style="display:none">Worpen, finishes en pijlen</th></tr></thead>
     <tbody>
     {% for match in matches %}
       <tr>
         <td>{{ match.number }}</td><td>{{ match.round_number }}</td><td>{{ match.board }}</td>
+        <td>{{ match.player1_player_round|default_if_none:"—" }} / {{ match.player2_player_round|default_if_none:"—" }}</td>
         <td><a href="{% url 'player_detail' match.player1_id %}">{{ match.player1 }}</a>{% if match.stroman_player_id == match.player1_id %} <span class="badge">Speelt stroman</span>{% endif %} <span class="muted">vs</span> {% if match.player2 %}<a href="{% url 'player_detail' match.player2_id %}">{{ match.player2 }}</a>{% if match.stroman_player_id == match.player2_id %} <span class="badge">Speelt stroman</span>{% endif %}{% else %}<span class="muted">Stroman (virtuele tegenstander)</span>{% endif %}</td>
         <td>
           {% if match.is_complete %}
@@ -36,22 +38,41 @@
   </div>
 </section>
 <section class="panel">
+  <h2>Wedstrijden per speler</h2>
+  <p class="muted">Cumulatief aantal wedstrijden per blokronde; klik op een naam om een lijn te verbergen of te tonen.</p>
+  <div class="player-progress-controls">
+    <button class="button button-secondary" type="button" data-player-progress-control="show">Selecteer alles</button>
+    <button class="button button-secondary" type="button" data-player-progress-control="hide">Deselecteer alles</button>
+  </div>
+  <div class="player-progress-chart-scroll">
+    <svg class="player-progress-chart" data-player-progress-chart role="img" aria-labelledby="player-progress-title player-progress-description" viewBox="0 0 900 360">
+      <title id="player-progress-title">Wedstrijden per speler per blokronde</title>
+      <desc id="player-progress-description">Lijnen tonen het cumulatieve aantal wedstrijden van iedere speler na iedere blokronde.</desc>
+    </svg>
+  </div>
+  <div class="player-progress-legend" data-player-progress-legend></div>
+  {{ player_progress_chart|json_script:"player-progress-chart-data" }}
+  <script src="{% static 'bullets/progress_chart.js' %}" defer></script>
+</section>
+<section class="panel">
   <h2>Controle</h2>
   <p>
     Totaal wedstrijden: {{ schedule_audit.actual_matches }}/{{ schedule_audit.expected_matches }} ·
-    stromanwedstrijden: {{ schedule_audit.actual_stroman_matches }}/{{ schedule_audit.expected_stroman_matches }}
+    stromanwedstrijden: {{ schedule_audit.actual_stroman_matches }}/{{ schedule_audit.expected_stroman_matches }} ·
+    overlappende spelersrondes: {{ schedule_audit.player_round_overlaps }}
     {% if schedule_audit.valid %}<span class="badge">OK</span>{% else %}<span class="error">Controle mislukt</span>{% endif %}
   </p>
   <div class="table-wrap"><table>
-    <thead><tr><th>Lotingsnr.</th><th>Speler</th><th>Wedstrijden ingepland</th><th>Stromanwedstrijden</th><th>Scheids</th><th>Controle</th></tr></thead>
+    <thead><tr><th>Lotingsnr.</th><th>Speler</th><th>Wedstrijden ingepland</th><th>Spelersronde nr.</th><th>Stromanwedstrijden</th><th>Scheids</th><th>Controle</th></tr></thead>
     <tbody>{% for row in match_audit %}
       <tr>
         <td>{{ row.attendance.draw_order }}</td>
         <td class="player-name"><a href="{% url 'player_detail' row.attendance.player_id %}">{{ row.attendance.player.name }}</a></td>
         <td>{{ row.matches }}</td>
+        <td>{{ row.player_round_number }}</td>
         <td>{{ row.stroman_matches }}</td>
         <td>{{ row.referees }}</td>
-        <td>{% if row.matches == row.expected_matches and row.stroman_matches <= 1 %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>
+        <td>{% if row.matches == row.expected_matches and row.stroman_matches <= 1 and row.player_rounds_valid %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>
       </tr>
     {% endfor %}</tbody>
   </table></div>
