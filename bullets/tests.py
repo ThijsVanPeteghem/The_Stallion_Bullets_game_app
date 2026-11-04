@@ -1464,6 +1464,7 @@ class CompetitionFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<a href=")
         self.assertEqual(len(response.context["matches"]), self.evening.matches.count())
         self.assertEqual(len(response.context["rankings"]), 5)
         self.assertEqual(len(response.context["evening_standings"]), 1)

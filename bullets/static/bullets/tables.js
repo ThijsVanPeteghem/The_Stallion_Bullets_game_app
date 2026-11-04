@@ -128,8 +128,16 @@
     fallbackCopy(html);
   }
 
+  function removeLinks(root) {
+    root.querySelectorAll("a").forEach((link) => {
+      link.replaceWith(...link.childNodes);
+    });
+    return root;
+  }
+
   function wordpressTableHtml(table) {
     const clone = table.cloneNode(true);
+    removeLinks(clone);
     clone.querySelectorAll(".copy-only").forEach((cell) => {
       cell.classList.remove("copy-only");
       cell.style.removeProperty("display");
@@ -216,8 +224,13 @@
         credentials: "same-origin",
       });
       if (!response.ok) throw new Error("Export request failed");
-      const html = await response.text();
-      const plainText = new DOMParser().parseFromString(html, "text/html").body.innerText;
+      const documentCopy = new DOMParser().parseFromString(
+        await response.text(),
+        "text/html",
+      );
+      removeLinks(documentCopy.body);
+      const html = documentCopy.body.innerHTML;
+      const plainText = documentCopy.body.innerText;
       await copyHtml(html, plainText);
       if (status) status.textContent = "Gekopieerd. Plak de tabellen in WordPress.";
     } catch {
@@ -243,8 +256,8 @@
       try {
         const clones = [...document.querySelectorAll('.match-slip[data-complete="true"]')]
           .map(wordpressSlipHtml);
-        if (!clones.length) throw new Error("No completed slips");
-        const html = `<div>${clones.map((clone) => clone.outerHTML).join("\\n")}</div>`;
+        clones.forEach(removeLinks);
+        const html = clones.map((clone) => clone.outerHTML).join("\n");
         const plainText = clones.map((clone) => clone.innerText).join("\n\n");
         await copyHtml(html, plainText);
         if (status) status.textContent = `${clones.length} ingevulde briefjes gekopieerd.`;
