@@ -18,7 +18,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-%PYTHON% -c "import django" >nul 2>&1
+%PYTHON% -c "import django; from ortools.sat.python import cp_model" >nul 2>&1
 if errorlevel 1 (
     echo Benodigde onderdelen worden eenmalig geinstalleerd...
     %PYTHON% -m pip install -r config\requirements.txt

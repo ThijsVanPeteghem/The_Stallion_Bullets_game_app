@@ -57,19 +57,27 @@
 <section class="panel">
   <h2>Controle</h2>
   <p>
+    Volle blokken: {% if schedule_audit.blocks_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %} ·
+    Scheidsrechterrotatie: {% if schedule_audit.referees_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %} ·
+    Scheidsrechterverdeling: {% if schedule_audit.referee_distribution_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %}
+  </p>
+  <p>
     Totaal wedstrijden: {{ schedule_audit.actual_matches }}/{{ schedule_audit.expected_matches }} ·
     stromanwedstrijden: {{ schedule_audit.actual_stroman_matches }}/{{ schedule_audit.expected_stroman_matches }} ·
     overlappende spelersrondes: {{ schedule_audit.player_round_overlaps }}
     {% if schedule_audit.valid %}<span class="badge">OK</span>{% else %}<span class="error">Controle mislukt</span>{% endif %}
   </p>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Lotingsnr.</th><th>Speler</th><th>Wedstrijden ingepland</th><th>Spelersronde nr.</th><th>Stromanwedstrijden</th><th>Scheids</th><th>Controle</th></tr></thead>
+  <div class="table-wrap"><table class="schedule-audit-table">
+    <colgroup><col style="width:5%"><col style="width:22%"><col style="width:9%"><col style="width:23%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:11%"></colgroup>
+    <thead><tr><th title="Lotingsnummer">Nr.</th><th>Speler</th><th title="Aantal ingeplande reguliere wedstrijden, zonder de extra stromanwedstrijd.">Matchen</th><th title="Blokrondes waarin deze speler speelt, inclusief de extra stromanwedstrijd."><abbr title="Blokrondes">BR</abbr></th><th title="Max. rust op rij: langste reeks blokrondes zonder wedstrijd, inclusief begin en einde van de avond. Scheidsrechterbeurten tellen als niet spelen.">Rust</th><th title="Max. wedstrijden op rij: langste reeks opeenvolgende blokrondes met een wedstrijd, inclusief de extra stromanwedstrijd.">Reeks</th><th title="Aantal extra wedstrijden als stroman."><abbr title="Stromanwedstrijden">Str.</abbr></th><th title="Aantal ingeplande scheidsrechterbeurten."><abbr title="Scheidsrechterbeurten">Sch.</abbr></th><th title="Controle van het aantal reguliere wedstrijden, stromanwedstrijden en spelersrondes.">Status</th></tr></thead>
     <tbody>{% for row in match_audit %}
       <tr>
         <td>{{ row.attendance.draw_order }}</td>
         <td class="player-name"><a href="{% url 'player_detail' row.attendance.player_id %}">{{ row.attendance.player.name }}</a></td>
         <td>{{ row.matches }}</td>
-        <td>{{ row.player_round_number }}</td>
+        <td>{{ row.block_rounds|default:"—" }}</td>
+        <td>{{ row.max_consecutive_rest }}</td>
+        <td>{{ row.max_consecutive_matches }}</td>
         <td>{{ row.stroman_matches }}</td>
         <td>{{ row.referees }}</td>
         <td>{% if row.matches == row.expected_matches and row.stroman_matches <= 1 and row.player_rounds_valid %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>

@@ -1,7 +1,13 @@
 from collections import Counter
 import heapq
+import logging
 import random
 from itertools import combinations
+
+from ortools.sat.python import cp_model
+
+
+logger = logging.getLogger(__name__)
 
 
 class ScheduleError(ValueError):
@@ -31,7 +37,7 @@ def expected_match_count(player_count, match_count):
     return (player_count * match_count + 1) // 2
 
 
-def _pairings(player_count, match_count=5, unmatched_player=0):
+def _pairings(player_count, match_count=5, unmatched_player=0, seed=None):
     has_bye = player_count % 2 == 1
     ghost = player_count if has_bye else None
     participant_count = player_count + int(has_bye)
@@ -52,6 +58,8 @@ def _pairings(player_count, match_count=5, unmatched_player=0):
         factors.append((games, bye))
         circle = [circle[0], circle[-1], *circle[1:-1]]
 
+    if seed is not None and has_bye:
+        random.Random(seed).shuffle(factors)
     start = 0
     if has_bye and match_count % 2:
         start = next(
@@ -172,6 +180,7 @@ def _pick_wave(
     player_pool=None,
     last_played_round=None,
     current_round=1,
+    consecutive_matches=None,
 ):
     target = min(board_count, len(edges))
     if target == 0:
@@ -194,6 +203,28 @@ def _pick_wave(
         ]
         return -max(waits, default=0), -sum(waits)
 
+    def consecutive_priority(game):
+        return sum(
+            (consecutive_matches or {}).get(player, 0) > 0
+            for player in game
+            if isinstance(player, int)
+        )
+
+    target_wait = max(
+        2,
+        (len(player_pool) + 2 * board_count - 1) // (2 * board_count)
+        if player_pool is not None else 2,
+    )
+
+    def overdue_priority(game):
+        return -max(
+            (
+                max(0, current_round - (last_played_round or {}).get(player, 0) - target_wait)
+                for player in game if isinstance(player, int)
+            ),
+            default=0,
+        )
+
     previous_players = {
         player
         for game in previous_games
@@ -211,6 +242,8 @@ def _pick_wave(
             candidates = sorted(
                 eligible_edges,
                 key=lambda game: (
+                    overdue_priority(game),
+                    consecutive_priority(game),
                     *wait_priority(game),
                     len(set(game) & previous_players),
                     progress_penalty(game),
@@ -275,6 +308,8 @@ def _pick_wave(
         candidates = sorted(
             edges,
             key=lambda game: (
+                overdue_priority(game),
+                consecutive_priority(game),
                 *wait_priority(game),
                 progress_penalty(game),
                 rng.random(),
@@ -530,7 +565,7 @@ def _generate_progressive_schedule_once(
     unmatched_player=0,
 ):
     rng = random.Random(seed)
-    remaining = _pairings(player_count, match_count, unmatched_player)
+    remaining = _pairings(player_count, match_count, unmatched_player, seed=seed)
     board_count = min(
         requested_board_count,
         max(1, player_count // 3),
@@ -543,6 +578,7 @@ def _generate_progressive_schedule_once(
     referee_counts = Counter()
     appearance_counts = Counter()
     last_played_round = Counter()
+    consecutive_matches = Counter()
     matches = []
     round_number = 1
 
@@ -570,17 +606,44 @@ def _generate_progressive_schedule_once(
         if not ready_games:
             raise ScheduleError("Er is geen wedstrijd beschikbaar op de volgende spelersronde.")
 
-        wave = _pick_wave(
-            ready_games,
-            board_count,
-            previous_games,
-            referee_counts,
-            rng,
-            appearance_counts,
-            range(player_count),
-            last_played_round,
-            round_number,
-        )
+        rested_games = [
+            game for game in ready_games
+            if all(
+                consecutive_matches[player] < 2
+                for player in game if isinstance(player, int)
+            )
+        ]
+        if not rested_games:
+            consecutive_matches.clear()
+            round_number += 1
+            continue
+        for wave_size in range(board_count, 0, -1):
+            try:
+                wave = _pick_wave(
+                    rested_games,
+                    wave_size,
+                    previous_games,
+                    referee_counts,
+                    rng,
+                    appearance_counts,
+                    range(player_count),
+                    last_played_round,
+                    round_number,
+                    consecutive_matches,
+                )
+            except ScheduleError:
+                if wave_size == 1:
+                    raise
+            else:
+                break
+        playing_in_wave = {
+            player for _, game, _ in wave
+            for player in game if isinstance(player, int)
+        }
+        for player in range(player_count):
+            consecutive_matches[player] = (
+                consecutive_matches[player] + 1 if player in playing_in_wave else 0
+            )
         for board, game, referee in wave:
             match = {
                 "number": len(matches) + 1,
@@ -597,9 +660,9 @@ def _generate_progressive_schedule_once(
             appearance_counts.update(
                 player for player in game if isinstance(player, int)
             )
-            last_played_round.update(
-                {player: round_number for player in game if isinstance(player, int)}
-            )
+            for player in game:
+                if isinstance(player, int):
+                    last_played_round[player] = round_number
             remaining.remove(game)
             previous_games[board] = game
         round_number += 1
@@ -607,20 +670,23 @@ def _generate_progressive_schedule_once(
     return matches
 
 
-def _rebalance_referees(matches, player_count):
+def _rebalance_referees(matches, player_count, allow_fallback=False):
     matches_by_round = {}
     for match in matches:
         matches_by_round.setdefault(match["round"], []).append(match)
     board_count = max(match["board"] for match in matches)
-    seed_round = max(
-        round_number
-        for round_number, round_matches in matches_by_round.items()
-        if len(round_matches) == board_count
-    )
-    previous_games = {
-        match["board"]: (match["player1"], match["player2"])
-        for match in matches_by_round[seed_round]
-    }
+    if allow_fallback:
+        previous_games = {board: () for board in range(1, board_count + 1)}
+    else:
+        seed_round = max(
+            round_number
+            for round_number, round_matches in matches_by_round.items()
+            if len(round_matches) == board_count
+        )
+        previous_games = {
+            match["board"]: (match["player1"], match["player2"])
+            for match in matches_by_round[seed_round]
+        }
     round_choices = []
     for round_number in sorted(matches_by_round):
         round_matches = matches_by_round[round_number]
@@ -638,6 +704,11 @@ def _rebalance_referees(matches, player_count):
                 for player in previous
                 if isinstance(player, int) and player not in playing
             ]
+            if allow_fallback:
+                choices[match["board"]].extend(
+                    player for player in range(player_count)
+                    if player not in playing and player not in previous
+                )
         round_choices.append((round_number, round_matches, choices))
         for match in round_matches:
             previous_games[match["board"]] = (
@@ -737,6 +808,236 @@ def _rebalance_referees(matches, player_count):
     return matches
 
 
+def _schedule_respects_board_rules(matches, player_count, board_count):
+    if not matches:
+        return False
+    rounds = {}
+    duties = Counter()
+    previous_players = {}
+    for match in sorted(matches, key=lambda item: (item["round"], item["board"])):
+        block_round = match["round"]
+        board = match["board"]
+        referee = match["referee"]
+        if not 1 <= board <= board_count or referee not in range(player_count):
+            return False
+        games = rounds.setdefault(block_round, [])
+        if any(game["board"] == board for game in games):
+            return False
+        participants = {match["player1"], match["player2"]}
+        if referee in participants:
+            return False
+        if board in previous_players and referee not in previous_players[board]:
+            return False
+        games.append(match)
+        previous_players[board] = participants
+        duties[referee] += 1
+    expected_rounds = (len(matches) + board_count - 1) // board_count
+    if set(rounds) != set(range(1, expected_rounds + 1)):
+        return False
+    for block_round, games in rounds.items():
+        expected = (
+            board_count if block_round < expected_rounds
+            else len(matches) - board_count * (expected_rounds - 1)
+        )
+        if len(games) != expected:
+            return False
+        players = [player for game in games for player in (game["player1"], game["player2"])]
+        referees = [game["referee"] for game in games]
+        if (
+            len(players) != len(set(players))
+            or len(referees) != len(set(referees))
+            or set(players) & set(referees)
+        ):
+            return False
+    counts = [duties[player] for player in range(player_count)]
+    return max(counts) - min(counts) <= 1
+
+
+def _assign_strict_board_schedule(matches, player_count, board_count, group_phases=True):
+    model = cp_model.CpModel()
+    game_count = len(matches)
+    round_count = (game_count + board_count - 1) // board_count
+    phases = {}
+    for index, match in enumerate(matches):
+        phase = min(match["player_rounds"].values()) if group_phases else 0
+        phases.setdefault(phase, []).append(index)
+    positions = [None] * game_count
+    games_at_slot = [None] * game_count
+    hints = {}
+    offset = 0
+    for phase in sorted(phases):
+        indices = phases[phase]
+        for rank, index in enumerate(indices):
+            positions[index] = model.new_int_var(offset, offset + len(indices) - 1, f"position_{index}")
+            hints[index] = offset + rank
+            games_at_slot[offset + rank] = model.new_int_var_from_domain(
+                cp_model.Domain.from_values(indices), f"game_{offset + rank}"
+            )
+        offset += len(indices)
+    model.add_inverse(positions, games_at_slot)
+    times = [model.new_int_var(0, round_count - 1, f"time_{index}") for index in range(game_count)]
+    times_by_player = [[] for _ in range(player_count)]
+    for index, match in enumerate(matches):
+        model.add_division_equality(times[index], positions[index], board_count)
+        model.add_hint(positions[index], hints[index])
+        for player in (match["player1"], match["player2"]):
+            times_by_player[player].append(times[index])
+        if match.get("stroman_player") is not None:
+            model.add(positions[index] == game_count - 1)
+    first_players = [model.new_int_var(0, player_count - 1, f"first_{slot}") for slot in range(game_count)]
+    second_players = [model.new_int_var(0, player_count - 1, f"second_{slot}") for slot in range(game_count)]
+    referees = [model.new_int_var(0, player_count - 1, f"referee_{slot}") for slot in range(game_count)]
+    for slot in range(game_count):
+        model.add_element(games_at_slot[slot], [match["player1"] for match in matches], first_players[slot])
+        model.add_element(games_at_slot[slot], [match["player2"] for match in matches], second_players[slot])
+        if slot >= board_count:
+            model.add_allowed_assignments(
+                [games_at_slot[slot - board_count], referees[slot]],
+                [(index, player) for index, match in enumerate(matches)
+                 for player in (match["player1"], match["player2"])],
+            )
+    last_round_size = game_count % board_count or board_count
+    for first in range(last_round_size - 1):
+        model.add(games_at_slot[first] < games_at_slot[first + 1])
+    for first in range(last_round_size, board_count - 1):
+        model.add(games_at_slot[first] < games_at_slot[first + 1])
+    for start in range(0, game_count, board_count):
+        end = min(game_count, start + board_count)
+        model.add_all_different(first_players[start:end] + second_players[start:end] + referees[start:end])
+    for player in range(player_count):
+        assignments = []
+        for slot, referee in enumerate(referees):
+            assigned = model.new_bool_var(f"duty_{player}_{slot}")
+            model.add(referee == player).only_enforce_if(assigned)
+            model.add(referee != player).only_enforce_if(assigned.negated())
+            assignments.append(assigned)
+        model.add(sum(assignments) >= game_count // player_count)
+        model.add(sum(assignments) <= (game_count + player_count - 1) // player_count)
+    maxima = []
+    doubles = []
+    for player, player_times in enumerate(times_by_player):
+        gaps = [player_times[0], round_count - player_times[-1] - 1]
+        for index, (left, right) in enumerate(zip(player_times, player_times[1:])):
+            model.add(right > left)
+            gaps.append(right - left - 1)
+            double = model.new_bool_var(f"consecutive_{player}_{index}")
+            model.add(right == left + 1).only_enforce_if(double)
+            model.add(right != left + 1).only_enforce_if(double.negated())
+            doubles.append(double)
+        for first, third in zip(player_times, player_times[2:]):
+            model.add(third >= first + 3)
+        maximum = model.new_int_var(0, round_count, f"rest_{player}")
+        model.add_max_equality(maximum, gaps)
+        maxima.append(maximum)
+    maximum_rest = model.new_int_var(0, round_count, "maximum_rest")
+    model.minimize(sum(doubles))
+    model.add_max_equality(maximum_rest, maxima)
+    feasible_solver = cp_model.CpSolver()
+    feasible_solver.parameters.max_time_in_seconds = 15
+    feasible_solver.parameters.num_search_workers = 8
+    feasible_solver.parameters.stop_after_first_solution = True
+    status = feasible_solver.solve(model)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        if group_phases:
+            return _assign_strict_board_schedule(matches, player_count, board_count, group_phases=False)
+        return None
+    model.clear_hints()
+    for variable in positions + games_at_slot + referees:
+        model.add_hint(variable, feasible_solver.value(variable))
+    solver = _solve_rest_limits(
+        model, maximum_rest, feasible_solver.value(maximum_rest),
+        workers=8, deterministic_budget=2, time_budget=8,
+    )
+    if solver is None:
+        solver = feasible_solver
+    result = []
+    for slot in range(game_count):
+        result.append({
+            **matches[solver.value(games_at_slot[slot])],
+            "number": slot + 1,
+            "round": slot // board_count + 1,
+            "board": slot % board_count + 1,
+            "referee": solver.value(referees[slot]),
+            "referee_fallback": False,
+        })
+    if not _schedule_respects_board_rules(result, player_count, board_count):
+        return None
+    return result
+
+
+def _rest_swap_score(matches, player_count):
+    rounds_by_player = [[] for _ in range(player_count)]
+    round_players = {}
+    doubles = 0
+    for match in matches:
+        block_round = match["round"]
+        playing = round_players.setdefault(block_round, set())
+        participants = {match["player1"], match["player2"]}
+        if participants & playing:
+            return None
+        playing.update(participants)
+        for player in participants:
+            player_rounds = rounds_by_player[player]
+            if match["player_rounds"][player] != len(player_rounds) + 1:
+                return None
+            if player_rounds and player_rounds[-1] == block_round - 1:
+                doubles += 1
+                if len(player_rounds) > 1 and player_rounds[-2] == block_round - 2:
+                    return None
+            player_rounds.append(block_round)
+    last_round = matches[-1]["round"]
+    rest_maxima = [
+        max(
+            rounds[0] - 1,
+            last_round - rounds[-1],
+            max((right - left - 1 for left, right in zip(rounds, rounds[1:])), default=0),
+        )
+        for rounds in rounds_by_player
+    ]
+    return (
+        max(rest_maxima),
+        max(rest_maxima) - min(rest_maxima),
+        sum(rest * rest for rest in rest_maxima),
+        doubles,
+    )
+
+
+def _solve_rest_limits(
+    model, maximum_rest, upper_bound,
+    workers=1, deterministic_budget=0.3, time_budget=3,
+):
+    for rest_limit in range(1, upper_bound + 1):
+        limit_assumption = model.new_bool_var(f"rest_limit_{rest_limit}")
+        model.add(maximum_rest <= rest_limit).only_enforce_if(limit_assumption)
+        model.clear_assumptions()
+        model.add_assumption(limit_assumption)
+        solver = cp_model.CpSolver()
+        solver.parameters.max_deterministic_time = deterministic_budget
+        solver.parameters.max_time_in_seconds = time_budget
+        solver.parameters.num_search_workers = workers
+        status = solver.solve(model)
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return solver
+        if status == cp_model.UNKNOWN:
+            logger.info("Rustgrens %s onbeslist binnen de zoeklimiet.", rest_limit)
+        elif status != cp_model.INFEASIBLE:
+            logger.warning("Rustoptimalisatie afgebroken: %s", solver.status_name(status))
+            return None
+    return None
+
+
+def _improve_rest_distribution(matches, player_count):
+    result = _assign_strict_board_schedule(
+        matches, player_count, max(match["board"] for match in matches)
+    )
+    if result is None:
+        raise ScheduleError(
+            "Geen geldig schema gevonden met volle blokrondes, vaste scheidsrechterrotatie "
+            "en gelijk verdeelde scheidsrechterbeurten. Probeer minder dartsblokken."
+        )
+    return result
+
+
 def generate_schedule(player_count, board_count, match_count=5, stroman_player=None):
     if not 4 <= player_count <= 128:
         raise ScheduleError("Een competitieavond moet 4 tot en met 128 spelers hebben.")
@@ -781,6 +1082,7 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
             None,
         )
         selected_stroman = stroman_player
+        stroman_repeat_count = 0
         if stroman_match:
             unmatched_player = stroman_match["player1"]
             matches_in_round = [
@@ -799,6 +1101,20 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
                 match["referee"] for match in matches_in_round
             }
             referees_in_round.add(stroman_match["referee"])
+            previous_round_players = {
+                player
+                for match in schedule[:-1]
+                if match["round"] == stroman_match["round"] - 1
+                for player in (match["player1"], match["player2"])
+                if isinstance(player, int)
+            }
+            earlier_round_players = {
+                player
+                for match in schedule[:-1]
+                if match["round"] == stroman_match["round"] - 2
+                for player in (match["player1"], match["player2"])
+                if isinstance(player, int)
+            }
             available_stromans = {
                 player
                 for match in schedule[:-1]
@@ -807,13 +1123,29 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
                 and player != unmatched_player
                 and player not in playing_in_round
                 and player not in referees_in_round
+                and player not in previous_round_players & earlier_round_players
             }
             if selected_stroman is None:
                 if not available_stromans:
                     continue
-                selected_stroman = random.SystemRandom().choice(
-                    sorted(available_stromans)
+                earlier_opponents = Counter(
+                    player
+                    for match in schedule[:-1]
+                    if unmatched_player in (match["player1"], match["player2"])
+                    for player in (match["player1"], match["player2"])
+                    if isinstance(player, int) and player != unmatched_player
                 )
+                minimum_encounters = min(
+                    earlier_opponents[player] for player in available_stromans
+                )
+                available_stromans = {
+                    player for player in available_stromans
+                    if earlier_opponents[player] == minimum_encounters
+                }
+                selected_stroman = random.SystemRandom().choice(
+                    sorted(available_stromans - previous_round_players or available_stromans)
+                )
+                stroman_repeat_count = earlier_opponents[selected_stroman]
             elif selected_stroman not in available_stromans:
                 continue
             stroman_match["player2"] = selected_stroman
@@ -914,19 +1246,45 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
             for block_rounds in block_rounds_by_player.values()
             for left, right in zip(block_rounds, block_rounds[1:])
         ]
+        consecutive_pairs = sum(gap == 0 for gap in empty_round_gaps)
+        last_block_round = max(match["round"] for match in schedule)
+        maximum_rest_by_player = [
+            max(
+                block_rounds[0] - 1,
+                last_block_round - block_rounds[-1],
+                max(
+                    (right - left - 1 for left, right in zip(block_rounds, block_rounds[1:])),
+                    default=0,
+                ),
+            )
+            for block_rounds in block_rounds_by_player.values()
+        ]
+        if any(
+            third == second + 1 and second == first + 1
+            for block_rounds in block_rounds_by_player.values()
+            for first, second, third in zip(
+                block_rounds, block_rounds[1:], block_rounds[2:]
+            )
+        ):
+            continue
         partial_rounds = sum(len(matches) < min(board_count, player_count // 3) for matches in rounds.values())
         score = (
+            max(duties) - min(duties),
+            consecutive_pairs,
+            max(maximum_rest_by_player),
+            max(maximum_rest_by_player) - min(maximum_rest_by_player),
+            sum(rest * rest for rest in maximum_rest_by_player),
             max(0, partial_rounds - int(len(regular_matches) % min(board_count, player_count // 3) != 0)),
             sum(min(board_count, player_count // 3) - len(matches) for matches in rounds.values() if len(matches) < min(board_count, player_count // 3)),
             max(first_rounds.values()),
             sum(first_rounds.values()),
-            max(duties) - min(duties),
             sum(count * count for count in duties),
             max(empty_round_gaps, default=0),
             sum(empty_round_gaps),
         )
-        if best_score is None or score < best_score:
-            best_schedule, best_score = schedule, score
+        ranking_score = (stroman_repeat_count, *score)
+        if best_score is None or ranking_score < best_score:
+            best_schedule, best_score = schedule, ranking_score
             expected_spread = 1 if len(schedule) >= player_count else 0
             target_empty_gap = max(
                 0,
@@ -935,9 +1293,12 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
                 - 1,
             )
             if (
-                score[0] == 0
-                and score[2] <= expected_spread
-                and score[6] <= target_empty_gap
+                stroman_repeat_count == 0
+                and consecutive_pairs == 0
+                and score[5] == 0
+                and score[0] <= expected_spread
+                and score[2] <= target_empty_gap
+                and score[3] <= 1
             ):
                 break
 
@@ -948,4 +1309,4 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
                 "Kies een andere speler."
             )
         raise ScheduleError("Er kon geen geldig schema met een evenwichtige scheidsrechterverdeling worden gemaakt.")
-    return best_schedule
+    return _improve_rest_distribution(best_schedule, player_count)

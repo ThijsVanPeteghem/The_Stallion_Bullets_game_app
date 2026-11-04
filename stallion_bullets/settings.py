@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
 SECRET_KEY = "local-development-key-change-before-public-hosting"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]

@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}The Stallion Bullets{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'bullets/style.css' %}?v=wordpress-sort-20261029">
+  <link rel="stylesheet" href="{% static 'bullets/style.css' %}?v=compact-audit-20261104">
   <script src="{% static 'bullets/tables.js' %}?v=wordpress-all-slips-20261029" defer></script>
 </head>
 <body>
@@ -20,11 +20,12 @@
       <a href="{% url 'seasons' %}">Seizoenen</a>
       <a href="{% url 'players' %}">Spelers</a>
       <a href="{% url 'rules' %}">Spelregels</a>
+      <a href="{% url 'about' %}">Info</a>
     </nav>
   </header>
   <main class="container">
     {% block content %}{% endblock %}
   </main>
-  <footer>The Stallion Bullets · Competitiebeheer</footer>
+  <footer>The Stallion Bullets · Competitiebeheer · <a href="{% url 'about' %}">Over deze app</a></footer>
 </body>
 </html>

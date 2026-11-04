@@ -1,5 +1,6 @@
 from collections import Counter
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
@@ -30,6 +31,10 @@ def home(request):
 
 def rules(request):
     return render(request, "bullets/rules.html")
+
+
+def about(request):
+    return render(request, "bullets/about.html", {"app_version": settings.APP_VERSION})
 
 
 def players(request):
@@ -178,12 +183,10 @@ def new_evening(request):
         except StromanSelectionError as error:
             form.add_error("stroman_player", str(error))
             return render(request, "bullets/new_evening.html", {"form": form})
-        except ScheduleError:
+        except ScheduleError as error:
             form.add_error(
                 None,
-                "Met deze combinatie van spelers, dartsblokken en wedstrijden per speler "
-                "kan geen geldig schema worden gemaakt. Probeer minder dartsblokken "
-                "of wijzig het aantal wedstrijden per speler.",
+            str(error),
             )
             return render(request, "bullets/new_evening.html", {"form": form})
         return redirect("evening_detail", evening_id=evening.id)
@@ -209,6 +212,10 @@ def _evening_context(evening):
         attendance.player_id: [0]
         for attendance in attendances
     }
+    consecutive_rest = Counter()
+    consecutive_matches = Counter()
+    max_consecutive_rest = Counter()
+    max_consecutive_matches = Counter()
     matches_by_block_round = {}
     for match in matches:
         matches_by_block_round.setdefault(match.round_number, []).append(match)
@@ -218,9 +225,21 @@ def _evening_context(evening):
                 if player_id is not None:
                     progress_counts[player_id] += 1
         for attendance in attendances:
-            progress_values[attendance.player_id].append(
-                progress_counts[attendance.player_id]
+            player_id = attendance.player_id
+            played = progress_counts[player_id] > progress_values[player_id][-1]
+            consecutive_matches[player_id] = (
+                consecutive_matches[player_id] + 1 if played else 0
             )
+            consecutive_rest[player_id] = (
+                0 if played else consecutive_rest[player_id] + 1
+            )
+            max_consecutive_matches[player_id] = max(
+                max_consecutive_matches[player_id], consecutive_matches[player_id]
+            )
+            max_consecutive_rest[player_id] = max(
+                max_consecutive_rest[player_id], consecutive_rest[player_id]
+            )
+            progress_values[player_id].append(progress_counts[player_id])
     player_progress_chart = {
         "block_rounds": list(range(last_block_round + 1)),
         "max_matches": max(progress_counts.values(), default=0),
@@ -235,6 +254,7 @@ def _evening_context(evening):
     }
     player_round_counts = Counter()
     player_rounds_by_player = {}
+    block_rounds_by_player = {}
     player_round_overlaps = 0
     player_round_gaps_valid = True
     for match in matches:
@@ -247,6 +267,7 @@ def _evening_context(evening):
             player_rounds_by_player.setdefault(player_id, []).append(
                 player_round_counts[player_id]
             )
+            block_rounds_by_player.setdefault(player_id, []).append(match.round_number)
         match.player1_player_round = match.player_rounds.get(match.player1_id)
         match.player2_player_round = match.player_rounds.get(match.player2_id)
         if len(match.player_rounds) == 2:
@@ -330,6 +351,42 @@ def _evening_context(evening):
     referee_counts = Counter(
         match.referee_id for match in matches if match.referee_id is not None
     )
+    active_boards = min(
+        evening.board_count, max(1, len(players) // 3), max(1, expected_total_matches // 2)
+    )
+    expected_rounds = (expected_total_matches + active_boards - 1) // active_boards
+    blocks_valid = set(round_participants) == set(range(1, expected_rounds + 1))
+    for block_round in range(1, expected_rounds + 1):
+        games = [match for match in matches if match.round_number == block_round]
+        expected_boards = (
+            active_boards if block_round < expected_rounds
+            else expected_total_matches - active_boards * (expected_rounds - 1)
+        )
+        blocks_valid = blocks_valid and (
+            len(games) == expected_boards
+            and len({match.board for match in games}) == expected_boards
+            and all(1 <= match.board <= active_boards for match in games)
+        )
+    previous_board_players = {}
+    referees_by_round = {}
+    referees_valid = True
+    for match in sorted(matches, key=lambda item: (item.round_number, item.number)):
+        used = referees_by_round.setdefault(match.round_number, set())
+        referees_valid = referees_valid and (
+            match.referee_id is not None
+            and match.referee_id not in round_participants[match.round_number]
+            and match.referee_id not in used
+            and (
+                match.round_number == 1
+                or match.referee_id in previous_board_players.get(match.board, set())
+            )
+        )
+        used.add(match.referee_id)
+        previous_board_players[match.board] = {match.player1_id, match.player2_id}
+    duty_counts = [referee_counts[player.id] for player in players]
+    referee_distribution_valid = (
+        max(duty_counts, default=0) - min(duty_counts, default=0) <= 1
+    )
     return {
         "evening": evening,
         "attendances": attendances,
@@ -344,6 +401,9 @@ def _evening_context(evening):
             "actual_stroman_matches": stroman_match_total,
             "player_round_overlaps": player_round_overlaps,
             "player_rounds_valid": player_rounds_valid and player_round_gaps_valid,
+            "blocks_valid": blocks_valid,
+            "referees_valid": referees_valid,
+            "referee_distribution_valid": referee_distribution_valid,
             "valid": (
                 len(matches) == expected_total_matches
                 and stroman_match_total == expected_stroman_matches
@@ -358,6 +418,9 @@ def _evening_context(evening):
                 and rounds_valid
                 and player_rounds_valid
                 and player_round_gaps_valid
+                and blocks_valid
+                and referees_valid
+                and referee_distribution_valid
             ),
         },
         "match_audit": [
@@ -369,7 +432,15 @@ def _evening_context(evening):
                 ),
                 "stroman_matches": stroman_match_counts[attendance.player_id],
                 "referees": referee_counts[attendance.player_id],
+                "max_consecutive_rest": max_consecutive_rest[attendance.player_id],
+                "max_consecutive_matches": max_consecutive_matches[attendance.player_id],
                 "expected_matches": evening.match_count,
+                "block_rounds": ", ".join(
+                    str(block_round)
+                    for block_round in sorted(
+                        block_rounds_by_player.get(attendance.player_id, [])
+                    )
+                ),
                 "player_round_number": max(
                     player_rounds_by_player.get(attendance.player_id, []),
                     default=0,

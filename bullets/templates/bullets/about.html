@@ -1,0 +1,15 @@
+{% extends "bullets/base.html" %}
+{% block title %}Over deze app | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow">INFORMATIE</p>
+<h1>Over deze app</h1>
+<h2>The Stallion Bullets</h2>
+<p><strong>Versie V{{ app_version }}</strong></p>
+<p>Lokale webapp voor het beheren van de dartscompetitie van The Stallion Bullets.</p>
+<dl>
+  <dt>Platform</dt>
+  <dd>Python en Django</dd>
+  <dt>Gegevensopslag</dt>
+  <dd>SQLite, lokaal op deze computer</dd>
+</dl>
+{% endblock %}

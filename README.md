@@ -2,6 +2,12 @@
 
 Lokale webapp voor het beheren van de dartscompetitie. De applicatie gebruikt Django en bewaart de gegevens standaard in `data\competitie.sqlite3`. Met de omgevingsvariabele `DATABASE_NAME` kun je een andere database kiezen.
 
+## Versiebeheer
+
+De huidige appversie staat in het bestand [VERSION](./VERSION) direct in de projectmap. Dit is de enige plek waar het versienummer wordt bijgehouden; de pagina **Over deze app** toont dit nummer met een `V` ervoor, bijvoorbeeld `V2.0.0`.
+
+Om een nieuwe versie uit te brengen, wijzig je alleen het nummer in `VERSION` en herstart je de app. Gebruik `MAJOR.MINOR.PATCH`, zonder `V`: verhoog `PATCH` voor foutoplossingen, `MINOR` voor nieuwe compatibele functionaliteit en `MAJOR` voor incompatibele wijzigingen. Neem de wijziging mee in dezelfde Git-commit als de bijbehorende code. Het bestand `VERSION` moet altijd samen met de app worden meegeleverd.
+
 ## Opstarten op Windows
 
 Dubbelklik in de projectmap op een van deze bestanden:

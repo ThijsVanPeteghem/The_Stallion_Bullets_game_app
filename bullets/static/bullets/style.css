@@ -74,6 +74,7 @@ h2 { font-size: 19px; color: var(--club-red-dark); }
 .selection-order li { min-width: 0; padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .selection-order li.muted { border-top: 0; }
 .small-field-note { display: block; max-width: 900px; margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--gold); background: #fff8e7; }
+#board-rest-advice[hidden] { display: none; }
 label { display: block; margin: 11px 0 5px; font-weight: 650; }
 input, textarea, select { width: 100%; border: 1px solid #d8c9c5; border-radius: 5px; padding: 9px 10px; color: var(--ink); font: inherit; accent-color: var(--club-red); }
 input:focus, textarea:focus, select:focus { border-color: var(--club-red); outline: 2px solid #90372633; outline-offset: 1px; }
@@ -104,6 +105,9 @@ tbody tr:hover { background: #fdf9f8; }
 .result-entry-table td .error { display: block; max-width: 140px; font-size: 11px; white-space: normal; }
 .result-entry-help { margin: 8px 0 18px; font-size: 13px; }
 .player-name { font-weight: 650; }
+.schedule-audit-table { min-width: 760px; table-layout: fixed; white-space: normal; font-size: 14px; }
+.schedule-audit-table th, .schedule-audit-table td { padding: 8px 6px; overflow-wrap: anywhere; }
+.schedule-audit-table abbr { cursor: help; }
 .player-stat-table { max-width: 600px; }
 .player-stat-table td:nth-child(2) { width: 120px; font-weight: 700; }
 .standing-progress { display: block; width: 90px; height: 9px; margin-top: 4px; accent-color: var(--club-red); }

@@ -42,6 +42,10 @@
       </div>
     </div>
     <p id="board-capacity-note" class="small-field-note" aria-live="polite">Voor 4 blokken zijn minimaal 12 deelnemers nodig.</p>
+    <div id="board-rest-advice" class="small-field-note" hidden>
+      <span id="board-rest-advice-text" role="status"></span>
+      <button class="button button-secondary" type="button" id="apply-board-rest-advice"></button>
+    </div>
     <div class="section-heading selection-heading">
       <div><h2>Aanwezige spelers</h2><p class="muted">Vink spelers aan in de gelote volgorde (4–128).</p></div>
       <span id="selection-count" class="badge">0 geselecteerd</span>
@@ -71,6 +75,9 @@
   const smallFieldNote = document.getElementById("small-field-note");
   const boardCapacityNote = document.getElementById("board-capacity-note");
   const boardCountInput = document.getElementById("id_board_count");
+  const boardRestAdvice = document.getElementById("board-rest-advice");
+  const boardRestAdviceText = document.getElementById("board-rest-advice-text");
+  const applyBoardRestAdvice = document.getElementById("apply-board-rest-advice");
   const matchCountInput = document.getElementById("id_match_count");
   const stromanInput = document.getElementById("id_stroman_player");
   const autoStromanInput = document.getElementById("id_auto_stroman");
@@ -110,6 +117,17 @@
     } else {
       boardCapacityNote.textContent = "";
     }
+    const recommendedBoards = Math.max(2, Math.floor(order.length / 4));
+    const showRestAdvice = order.length >= 4
+      && Number(matchCountInput.value || "5") > 1
+      && boardCount >= 2 && boardCount <= 30
+      && boardCount > recommendedBoards;
+    boardRestAdvice.hidden = !showRestAdvice;
+    boardRestAdviceText.textContent = showRestAdvice
+      ? `Rustadvies: overweeg ${recommendedBoards} blokken bij ${order.length} spelers. Ongeveer vier spelers per blok geeft meer ruimte voor rust naast spelen en schrijven. Minder blokken kan opeenvolgende wedstrijden beperken, maar maakt de avond langer; het is geen garantie op nul dubbele beurten.`
+      : "";
+    applyBoardRestAdvice.textContent = `Gebruik ${recommendedBoards} blokken`;
+    applyBoardRestAdvice.dataset.boardCount = recommendedBoards;
     const matchCount = matchCountInput.value || "5";
     const needsStroman = order.length % 2 === 1 && Number(matchCount) % 2 === 1;
     autoStromanInput.disabled = !needsStroman;
@@ -147,6 +165,10 @@
     });
   }
   boardCountInput.addEventListener("input", render);
+  applyBoardRestAdvice.addEventListener("click", () => {
+    boardCountInput.value = applyBoardRestAdvice.dataset.boardCount;
+    render();
+  });
   matchCountInput.addEventListener("input", render);
   autoStromanInput.addEventListener("change", render);
   render();

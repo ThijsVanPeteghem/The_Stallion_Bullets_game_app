@@ -6,7 +6,7 @@ from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.conf import settings
 from django.core.management import call_command
@@ -17,7 +17,15 @@ from django.utils import timezone
 
 from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
-from .schedule import expected_match_count, generate_schedule
+from .schedule import (
+    _improve_rest_distribution,
+    _solve_rest_limits,
+    _schedule_respects_board_rules,
+    ScheduleError,
+    cp_model,
+    expected_match_count,
+    generate_schedule,
+)
 from .services import (
     _rank_season_standings,
     build_standings,
@@ -26,6 +34,17 @@ from .services import (
     sort_standings_for_ranking,
 )
 from .snapshots import create_database_snapshot
+
+
+class AboutPageTests(SimpleTestCase):
+    def test_about_page_renders_with_the_configured_version(self):
+        response = self.client.get(reverse("about"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bullets/about.html")
+        self.assertContains(response, "Over deze app")
+        self.assertContains(response, f"Versie V{settings.APP_VERSION}")
+        self.assertEqual(response.context["app_version"], settings.APP_VERSION)
 
 
 class DatabaseSnapshotTests(SimpleTestCase):
@@ -65,6 +84,243 @@ class DatabaseSnapshotTests(SimpleTestCase):
 
 
 class ScheduleTests(SimpleTestCase):
+    def test_strict_board_rules_reject_empty_rounds_wrong_referees_and_unbalanced_duties(self):
+        matches = [
+            {"round": 1, "board": 1, "player1": 0, "player2": 1, "referee": 3},
+            {"round": 2, "board": 1, "player1": 2, "player2": 3, "referee": 0},
+            {"round": 3, "board": 1, "player1": 0, "player2": 1, "referee": 2},
+            {"round": 4, "board": 1, "player1": 2, "player2": 3, "referee": 1},
+        ]
+        self.assertTrue(_schedule_respects_board_rules(matches, 4, 1))
+        self.assertFalse(_schedule_respects_board_rules(matches, 4, 2))
+        for index, key, value in ((1, "referee", 3), (3, "referee", 0), (3, "round", 5)):
+            with self.subTest(index=index, key=key):
+                changed = [dict(match) for match in matches]
+                changed[index][key] = value
+                self.assertFalse(_schedule_respects_board_rules(changed, 4, 1))
+
+    def test_automatic_stroman_has_not_played_the_remaining_player_when_possible(self):
+        for player_count, board_count in ((15, 4), (19, 5), (29, 5)):
+            with self.subTest(players=player_count, boards=board_count):
+                matches = generate_schedule(player_count, board_count)
+                final = matches[-1]
+                self.assertIn("stroman_player", final)
+                opponents = {final["player1"], final["player2"]}
+                self.assertFalse(any(
+                    {match["player1"], match["player2"]} == opponents
+                    for match in matches[:-1]
+                ))
+
+    def test_automatic_stroman_allows_repeat_when_every_opponent_has_already_played(self):
+        matches = generate_schedule(5, 2)
+        final = matches[-1]
+        remaining_player = final["player1"]
+        encounters = Counter(
+            player
+            for match in matches[:-1]
+            if remaining_player in (match["player1"], match["player2"])
+            for player in (match["player1"], match["player2"])
+            if player != remaining_player
+        )
+        self.assertEqual(len(encounters), 4)
+        self.assertGreater(encounters[final["stroman_player"]], 0)
+        self.assertEqual(len(matches), expected_match_count(5, 5))
+
+    def test_rest_limits_are_tested_from_one_up_to_the_first_feasible_limit(self):
+        original_solve = cp_model.CpSolver.solve
+        for minimum in (1, 2, 3):
+            with self.subTest(minimum=minimum):
+                model = cp_model.CpModel()
+                maximum_rest = model.new_int_var(0, 4, "maximum_rest")
+                model.add(maximum_rest >= minimum)
+                model.minimize(maximum_rest)
+                attempts = []
+
+                def solve(solver, attempt_model):
+                    assumption = attempt_model.proto.assumptions[0]
+                    attempts.append(attempt_model.proto.variables[assumption].name)
+                    return original_solve(solver, attempt_model)
+
+                with patch.object(cp_model.CpSolver, "solve", autospec=True, side_effect=solve):
+                    solver = _solve_rest_limits(model, maximum_rest, 4)
+
+                self.assertIsNotNone(solver)
+                self.assertEqual(solver.value(maximum_rest), minimum)
+                self.assertEqual(
+                    attempts,
+                    [f"rest_limit_{limit}" for limit in range(1, minimum + 1)],
+                )
+
+    def test_rest_limits_return_no_solution_when_every_limit_is_infeasible(self):
+        model = cp_model.CpModel()
+        maximum_rest = model.new_int_var(0, 4, "maximum_rest")
+        model.add(maximum_rest >= 4)
+
+        self.assertIsNone(_solve_rest_limits(model, maximum_rest, 3))
+
+    def test_rest_limit_timeout_is_logged_as_unknown_before_trying_the_next_limit(self):
+        model = cp_model.CpModel()
+        maximum_rest = model.new_int_var(0, 3, "maximum_rest")
+        timed_out = Mock()
+        timed_out.solve.return_value = cp_model.UNKNOWN
+        feasible = Mock()
+        feasible.solve.return_value = cp_model.FEASIBLE
+
+        with patch.object(cp_model, "CpSolver", side_effect=[timed_out, feasible]) as factory:
+            with self.assertLogs("bullets.schedule", level="INFO") as logs:
+                solver = _solve_rest_limits(model, maximum_rest, 3)
+
+        self.assertIs(solver, feasible)
+        self.assertEqual(factory.call_count, 2)
+        self.assertIn("Rustgrens 1 onbeslist", logs.output[0])
+
+    def test_29_players_have_at_most_three_rest_rounds_on_five_boards(self):
+        matches = generate_schedule(29, 5)
+        rounds_by_player = defaultdict(list)
+        last_round = max(match["round"] for match in matches)
+        for match in matches:
+            for player in (match["player1"], match["player2"]):
+                rounds_by_player[player].append(match["round"])
+        rest_maxima = []
+        for player, block_rounds in rounds_by_player.items():
+            maximum = max(
+                block_rounds[0] - 1,
+                last_round - block_rounds[-1],
+                max(right - left - 1 for left, right in zip(block_rounds, block_rounds[1:])),
+            )
+            with self.subTest(player=player):
+                self.assertLessEqual(maximum, 3)
+            rest_maxima.append(maximum)
+        self.assertLessEqual(max(rest_maxima) - min(rest_maxima), 1)
+
+    def test_fewer_boards_reduce_consecutive_matches_for_small_rosters(self):
+        for player_count, crowded_boards, rest_boards in ((15, 5, 3), (19, 5, 4)):
+            with self.subTest(players=player_count):
+                double_counts = []
+                for board_count in (crowded_boards, rest_boards):
+                    rounds_by_player = defaultdict(list)
+                    try:
+                        matches = generate_schedule(player_count, board_count)
+                    except ScheduleError as error:
+                        self.assertEqual(board_count, crowded_boards)
+                        self.assertIn("Probeer minder dartsblokken", str(error))
+                        double_counts.append(None)
+                        continue
+                    for match in matches:
+                        for player in (match["player1"], match["player2"]):
+                            rounds_by_player[player].append(match["round"])
+                    double_counts.append(sum(
+                        right == left + 1
+                        for block_rounds in rounds_by_player.values()
+                        for left, right in zip(block_rounds, block_rounds[1:])
+                    ))
+                if double_counts[0] is not None:
+                    self.assertLessEqual(double_counts[1], double_counts[0])
+
+    def test_adequate_capacity_preserves_the_two_consecutive_matches_limit(self):
+        for player_count, board_count in ((20, 4), (25, 5), (28, 5), (50, 6)):
+            with self.subTest(players=player_count, boards=board_count):
+                previous_round = {}
+                streaks = Counter()
+                for match in generate_schedule(player_count, board_count):
+                    for player in (match["player1"], match["player2"]):
+                        streaks[player] = (
+                            streaks[player] + 1
+                            if previous_round.get(player) == match["round"] - 1 else 1
+                        )
+                        self.assertLessEqual(streaks[player], 2)
+                        previous_round[player] = match["round"]
+
+    def test_manual_stroman_also_obeys_the_two_consecutive_matches_limit(self):
+        for stroman in range(15):
+            with self.subTest(stroman=stroman):
+                matches = generate_schedule(15, 4, stroman_player=stroman)
+                self.assertEqual(matches[-1]["stroman_player"], stroman)
+                rounds = [
+                    match["round"] for match in matches
+                    if stroman in (match["player1"], match["player2"])
+                ]
+                self.assertFalse(any(
+                    second == first + 1 and third == second + 1
+                    for first, second, third in zip(rounds, rounds[1:], rounds[2:])
+                ))
+
+    def test_rest_and_schedule_invariants_for_15_to_50_players_and_3_to_6_boards(self):
+        successful_by_board_count = Counter()
+        attempted_combinations = 0
+        for player_count in range(15, 51):
+            for board_count in range(3, 7):
+                with self.subTest(players=player_count, boards=board_count):
+                    attempted_combinations += 1
+                    try:
+                        with patch(
+                            "bullets.schedule._improve_rest_distribution",
+                            wraps=_improve_rest_distribution,
+                        ) as optimizer:
+                            matches = generate_schedule(player_count, board_count)
+                    except ScheduleError as error:
+                        self.assertIn("Probeer minder dartsblokken", str(error))
+                        continue
+                    successful_by_board_count[board_count] += 1
+                    original = optimizer.call_args.args[0]
+                    active_boards = min(board_count, player_count // 3)
+                    self.assertTrue(
+                        _schedule_respects_board_rules(matches, player_count, active_boards)
+                    )
+                    self.assertLessEqual(
+                        max(match["round"] for match in matches),
+                        max(match["round"] for match in original),
+                    )
+                    self.assertEqual(len(matches), expected_match_count(player_count, 5))
+                    if player_count % 2:
+                        final_opponents = {matches[-1]["player1"], matches[-1]["player2"]}
+                        self.assertFalse(any(
+                            {match["player1"], match["player2"]} == final_opponents
+                            for match in matches[:-1]
+                        ))
+                    rounds_by_player = defaultdict(list)
+                    matches_by_round = defaultdict(list)
+                    regular_counts = Counter()
+                    cross_rounds = Counter()
+                    for match in matches:
+                        matches_by_round[match["round"]].append(match)
+                        for player in (match["player1"], match["player2"]):
+                            rounds_by_player[player].append(match["round"])
+                            self.assertEqual(
+                                match["player_rounds"][player],
+                                len(rounds_by_player[player]),
+                            )
+                            if player != match.get("stroman_player"):
+                                regular_counts[player] += 1
+                        player_rounds = tuple(sorted(match["player_rounds"].values()))
+                        if player_rounds[0] != player_rounds[1]:
+                            cross_rounds[player_rounds] += 1
+                    self.assertEqual(dict(regular_counts), dict.fromkeys(range(player_count), 5))
+                    self.assertEqual(
+                        dict(cross_rounds),
+                        {(1, 2): 1, (3, 4): 1, (5, 6): 1}
+                        if player_count % 2 else {},
+                    )
+                    for block_rounds in rounds_by_player.values():
+                        self.assertFalse(any(
+                            second == first + 1 and third == second + 1
+                            for first, second, third in zip(
+                                block_rounds, block_rounds[1:], block_rounds[2:]
+                            )
+                        ))
+                    for round_matches in matches_by_round.values():
+                        players = [
+                            player for match in round_matches
+                            for player in (match["player1"], match["player2"])
+                        ]
+                        referees = [match["referee"] for match in round_matches]
+                        self.assertEqual(len(players), len(set(players)))
+                        self.assertEqual(len(referees), len(set(referees)))
+                        self.assertFalse(set(players) & set(referees))
+                        self.assertLessEqual(len(round_matches), board_count)
+        self.assertEqual(attempted_combinations, 144)
+        self.assertEqual(set(successful_by_board_count), {3, 4, 5, 6})
+
     def test_expected_total_covers_every_supported_roster_and_game_count(self):
         for player_count in range(4, 129):
             for match_count in range(1, 21):
@@ -190,7 +446,7 @@ class LegacyImportTests(TestCase):
         }
         for player_count, expected_match_count in expected_totals.items():
             with self.subTest(players=player_count):
-                matches = generate_schedule(player_count, 6)
+                matches = generate_schedule(player_count, min(6, player_count // 4))
                 self.assertEqual(len(matches), expected_match_count)
                 stroman_matches = [
                     match
@@ -221,7 +477,7 @@ class LegacyImportTests(TestCase):
 
     def test_schedule_counts_round_fill_and_referee_balance(self):
         for player_count, requested_boards in (
-            (4, 2), (5, 2), (6, 4), (15, 4), (19, 4), (19, 5), (30, 6)
+            (4, 2), (5, 2), (15, 4), (19, 4), (19, 5), (30, 6)
         ):
             with self.subTest(players=player_count, boards=requested_boards):
                 matches = generate_schedule(player_count, requested_boards)
@@ -320,10 +576,7 @@ class LegacyImportTests(TestCase):
                     round_matches[match["round"]].append(match)
                     referee_counts[match["referee"]] += 1
                     if match["board"] in previous_games:
-                        self.assertTrue(
-                            match["referee"] in previous_games[match["board"]]
-                            or match.get("referee_fallback")
-                        )
+                        self.assertIn(match["referee"], previous_games[match["board"]])
                     previous_games[match["board"]] = (
                         match["player1"],
                         match["player2"],
@@ -334,14 +587,9 @@ class LegacyImportTests(TestCase):
                     for games in round_matches.values()
                     if any(match.get("stroman_player") is None for match in games)
                 ]
-                expected_remainder = (
-                    expected_match_count - (player_count % 2)
-                ) % active_boards
-                if expected_remainder:
-                    self.assertEqual(regular_round_sizes.count(expected_remainder), 1)
                 self.assertTrue(
                     all(
-                        size == active_boards or size == expected_remainder
+                        1 <= size <= active_boards
                         for size in regular_round_sizes
                     )
                 )
@@ -426,7 +674,6 @@ class LegacyImportTests(TestCase):
         for player_count, requested_boards, match_count in (
             (4, 2, 1),
             (4, 2, 20),
-            (6, 4, 3),
             (15, 4, 7),
             (19, 5, 3),
             (5, 2, 7),
@@ -717,7 +964,13 @@ class CompetitionFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<abbr title="Spelersronde">SR</abbr>')
-        self.assertContains(response, "Spelersronde nr.")
+        self.assertContains(response, "Blokrondes")
+        self.assertContains(response, 'class="schedule-audit-table"')
+        self.assertContains(response, '<abbr title="Blokrondes">BR</abbr>')
+        self.assertContains(response, '<abbr title="Stromanwedstrijden">Str.</abbr>')
+        self.assertContains(response, '<abbr title="Scheidsrechterbeurten">Sch.</abbr>')
+        self.assertContains(response, "Max. rust op rij")
+        self.assertContains(response, "Max. wedstrijden op rij")
         self.assertContains(response, "Wedstrijden per speler")
         self.assertEqual(
             response.context["player_progress_chart"]["block_rounds"][0],
@@ -735,6 +988,9 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertTrue(response.context["schedule_audit"]["player_rounds_valid"])
         self.assertTrue(response.context["schedule_audit"]["valid"])
+        self.assertTrue(response.context["schedule_audit"]["blocks_valid"])
+        self.assertTrue(response.context["schedule_audit"]["referees_valid"])
+        self.assertTrue(response.context["schedule_audit"]["referee_distribution_valid"])
         self.assertTrue(
             all(
                 row["player_round_number"]
@@ -742,6 +998,70 @@ class CompetitionFlowTests(TestCase):
                 for row in response.context["match_audit"]
             )
         )
+
+    def test_evening_audit_rejects_broken_block_referee_and_distribution_rules(self):
+        from .views import _evening_context
+
+        first = self.evening.matches.order_by("number").first()
+        original_round = first.round_number
+        original_referee = first.referee_id
+        first.round_number = 100
+        first.save(update_fields=["round_number"])
+        audit = _evening_context(self.evening)["schedule_audit"]
+        self.assertFalse(audit["blocks_valid"])
+        self.assertFalse(audit["valid"])
+
+        first.round_number = original_round
+        first.referee_id = first.player1_id
+        first.save(update_fields=["round_number", "referee"])
+        audit = _evening_context(self.evening)["schedule_audit"]
+        self.assertFalse(audit["referees_valid"])
+        self.assertFalse(audit["valid"])
+
+        first.referee_id = original_referee
+        first.save(update_fields=["referee"])
+        self.evening.matches.update(referee=self.players[0])
+        audit = _evening_context(self.evening)["schedule_audit"]
+        self.assertFalse(audit["referee_distribution_valid"])
+        self.assertFalse(audit["valid"])
+
+    def test_evening_audit_counts_rest_and_match_streaks_across_all_block_rounds(self):
+        from .views import _evening_context
+
+        evening = Evening.objects.create(
+            season=self.season, date="2026-11-04", board_count=2, match_count=3
+        )
+        first, second, third, idle = self.players[:4]
+        for order, player in enumerate((first, second, third, idle), start=1):
+            Attendance.objects.create(evening=evening, player=player, draw_order=order)
+        for number, (block_round, opponent) in enumerate(
+            ((3, second), (4, second), (8, third)), start=1
+        ):
+            match = Match.objects.create(
+                evening=evening, number=number, round_number=block_round,
+                board=1, player1=first, player2=opponent, referee=idle,
+            )
+            if block_round == 4:
+                MatchPlayerStats.objects.create(match=match, player=first, is_stroman=True)
+
+        rows = {
+            row["attendance"].player_id: row
+            for row in _evening_context(evening)["match_audit"]
+        }
+        for player, expected_rest, expected_matches, expected_rounds in (
+            (first, 3, 2, "3, 4, 8"), (second, 4, 2, "3, 4"),
+            (third, 7, 1, "8"), (idle, 8, 0, "")
+        ):
+            with self.subTest(player=player.name):
+                self.assertEqual(rows[player.id]["max_consecutive_rest"], expected_rest)
+                self.assertEqual(rows[player.id]["max_consecutive_matches"], expected_matches)
+                self.assertEqual(rows[player.id]["block_rounds"], expected_rounds)
+
+        evening.matches.all().delete()
+        for row in _evening_context(evening)["match_audit"]:
+            self.assertEqual(row["max_consecutive_rest"], 0)
+            self.assertEqual(row["max_consecutive_matches"], 0)
+            self.assertEqual(row["block_rounds"], "")
 
     def test_season_standings_use_the_requested_tie_break_order(self):
         players_by_name = {
@@ -975,7 +1295,7 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertEqual(set(appearances.values()), {3})
 
-    def test_new_evening_creates_a_valid_progressive_schedule_for_tight_capacity(self):
+    def test_new_evening_rejects_incompatible_strict_capacity_without_saving(self):
         selected_players = [*self.players, Player.objects.create(name="Speler 16")]
         draw_order = [player.id for player in selected_players]
 
@@ -991,10 +1311,9 @@ class CompetitionFlowTests(TestCase):
             },
         )
 
-        evening = Evening.objects.get(date="2026-11-03")
-        self.assertRedirects(response, reverse("evening_detail", args=[evening.id]))
-        audit_response = self.client.get(reverse("evening_detail", args=[evening.id]))
-        self.assertTrue(audit_response.context["schedule_audit"]["valid"])
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Probeer minder dartsblokken")
+        self.assertFalse(Evening.objects.filter(date="2026-11-03").exists())
 
     def test_manual_stroman_is_used_for_odd_evening(self):
         selected_players = self.players[:5]
@@ -1110,6 +1429,9 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "Aanwezige spelers")
         self.assertContains(response, 'placeholder="dd/MM/yyyy"')
         self.assertContains(response, 'id="board-capacity-note"')
+        self.assertContains(response, 'id="board-rest-advice"')
+        self.assertContains(response, 'id="apply-board-rest-advice"')
+        self.assertContains(response, "Rustadvies")
         self.assertContains(response, "Voor 4 blokken zijn minimaal 12 deelnemers nodig.")
         self.assertContains(response, 'name="match_count"')
         self.assertContains(response, 'value="5"')
@@ -1559,7 +1881,8 @@ class CompetitionFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Wedstrijdschema")
         self.assertContains(response, "Tussenstand")
-        self.assertContains(response, "Wedstrijden ingepland")
+        self.assertContains(response, "Matchen")
+        self.assertContains(response, "Aantal ingeplande reguliere wedstrijden")
         self.assertContains(response, "Scheids")
         self.assertContains(response, "Controle")
         self.assertContains(response, "tables.js")

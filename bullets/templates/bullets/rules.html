@@ -33,6 +33,7 @@
   <ul>
     <li>Als na de gewone planning één speler overblijft, speelt die de laatste reguliere wedstrijd tegen een echte deelnemer die al eerder die avond speelde.</li>
     <li>Die extra tegenstander is de stroman. De app kan de stroman willekeurig loten of de beheerder kan de gelote speler handmatig selecteren.</li>
+    <li>Bij automatische loting krijgt een stroman die nog niet tegen de overblijver speelde voorrang. Alleen als geen geschikte nieuwe tegenstander beschikbaar is, mag de onderlinge wedstrijd worden herhaald; de app kiest dan uit de kandidaten met de minste eerdere onderlinge wedstrijden. Een handmatige keuze blijft leidend.</li>
     <li>De wedstrijd telt als reguliere partij voor de overblijver. Voor de stroman telt die niet mee als extra gespeelde wedstrijd en tellen legs, winst/verlies en legs voor/tegen niet mee.</li>
     <li>Worpen, finishes en pijlen van de stroman blijven wel meetellen. De stroman krijgt geen punten voor gewonnen legs.</li>
     <li>Oudere geïmporteerde phantom-wedstrijden met een virtuele tegenstander blijven als historische gegevens zichtbaar.</li>
@@ -60,7 +61,15 @@
   <ul>
     <li>Iedere speler krijgt het ingestelde aantal reguliere wedstrijden; alleen de stroman heeft daarnaast één extra deelname.</li>
     <li>Een speler speelt maximaal één wedstrijd per ronde.</li>
+    <li>Elke blokronde gebruikt alle actieve dartsblokken; alleen de laatste ronde mag onvolledig zijn.</li>
+    <li>Vanaf de tweede blokronde schrijft op elk blok een van de twee spelers uit de vorige wedstrijd op dat blok. Alleen in de eerste ronde is de scheidsrechterkeuze vrij.</li>
+    <li>De scheidsrechterbeurten worden over alle spelers verdeeld, met maximaal één verschil.</li>
+    <li>Als geen schema wordt gevonden dat alle regels tegelijk haalt, wordt niets opgeslagen. Kies dan minder dartsblokken.</li>
+    <li>Drie wedstrijden in opeenvolgende blokrondes zijn niet toegestaan, ook niet met de extra stromanwedstrijd. Twee na elkaar worden zo veel mogelijk beperkt.</li>
+    <li>Minder blokken kan meer rust geven. Bij het aanmaken verschijnt waar nodig een vrijblijvend rustadvies; minder blokken kan de avond verlengen.</li>
     <li>Binnen geldige blok- en refereeplanning krijgen spelers met de langste wachttijd voorrang, zodat lege blokronden tussen wedstrijden beperkt blijven.</li>
+    <li>De planner probeert de maximale rust gelijkmatiger over spelers te verdelen. Daarbij tellen ook de blokrondes voor de eerste en na de laatste wedstrijd mee.</li>
+    <li>De rustoptimalisatie probeert eerst maximaal 1 rustblokronde op rij, daarna 2, 3 enzovoort. De eerste gevonden geldige grens wordt gebruikt; door een begrensde zoektijd is die niet altijd bewezen minimaal.</li>
     <li>Bij een oneven aantal spelers speelt de bye van opeenvolgende round-robinrondes één kruiswedstrijd; daardoor kan die wedstrijd twee verschillende spelersrondenummers tonen.</li>
     <li>In de laatste oneven spelersronde speelt de overblijver tegen de stroman.</li>
     <li>Een scheidsrechter speelt niet zelf in een wedstrijd van dezelfde ronde en wordt per ronde maximaal één keer toegewezen.</li>
