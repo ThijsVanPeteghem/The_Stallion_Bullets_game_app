@@ -84,6 +84,13 @@ class DatabaseSnapshotTests(SimpleTestCase):
 
 
 class ScheduleTests(SimpleTestCase):
+    def test_incompatible_small_roster_is_rejected_with_actionable_guidance(self):
+        with self.assertRaisesRegex(
+            ScheduleError,
+            "volle blokrondes.*Probeer minder dartsblokken.*aantal spelers",
+        ):
+            generate_schedule(6, 4, 3)
+
     def test_strict_board_rules_reject_empty_rounds_wrong_referees_and_unbalanced_duties(self):
         matches = [
             {"round": 1, "board": 1, "player1": 0, "player2": 1, "referee": 3},
@@ -218,7 +225,7 @@ class ScheduleTests(SimpleTestCase):
                     self.assertLessEqual(double_counts[1], double_counts[0])
 
     def test_adequate_capacity_preserves_the_two_consecutive_matches_limit(self):
-        for player_count, board_count in ((20, 4), (25, 5), (28, 5), (50, 6)):
+        for player_count, board_count in ((20, 4), (25, 5), (27, 5), (28, 5), (29, 5), (50, 6)):
             with self.subTest(players=player_count, boards=board_count):
                 previous_round = {}
                 streaks = Counter()
@@ -228,7 +235,8 @@ class ScheduleTests(SimpleTestCase):
                             streaks[player] + 1
                             if previous_round.get(player) == match["round"] - 1 else 1
                         )
-                        self.assertLessEqual(streaks[player], 2)
+                        maximum_streak = 1 if player_count >= 5 * board_count else 2
+                        self.assertLessEqual(streaks[player], maximum_streak)
                         previous_round[player] = match["round"]
 
     def test_manual_stroman_also_obeys_the_two_consecutive_matches_limit(self):
@@ -308,6 +316,11 @@ class ScheduleTests(SimpleTestCase):
                                 block_rounds, block_rounds[1:], block_rounds[2:]
                             )
                         ))
+                        if player_count >= 5 * active_boards:
+                            self.assertFalse(any(
+                                second == first + 1
+                                for first, second in zip(block_rounds, block_rounds[1:])
+                            ))
                     for round_matches in matches_by_round.values():
                         players = [
                             player for match in round_matches

@@ -58,7 +58,7 @@ def _pairings(player_count, match_count=5, unmatched_player=0, seed=None):
         factors.append((games, bye))
         circle = [circle[0], circle[-1], *circle[1:-1]]
 
-    if seed is not None and has_bye:
+    if seed is not None:
         random.Random(seed).shuffle(factors)
     start = 0
     if has_bye and match_count % 2:
@@ -929,6 +929,8 @@ def _assign_strict_board_schedule(matches, player_count, board_count, group_phas
         maximum = model.new_int_var(0, round_count, f"rest_{player}")
         model.add_max_equality(maximum, gaps)
         maxima.append(maximum)
+    if player_count >= 5 * board_count:
+        model.add(sum(doubles) == 0)
     maximum_rest = model.new_int_var(0, round_count, "maximum_rest")
     model.minimize(sum(doubles))
     model.add_max_equality(maximum_rest, maxima)
@@ -1027,13 +1029,32 @@ def _solve_rest_limits(
 
 
 def _improve_rest_distribution(matches, player_count):
+    board_count = max(match["board"] for match in matches)
+    if _schedule_respects_board_rules(matches, player_count, board_count):
+        rounds_by_player = [[] for _ in range(player_count)]
+        for match in matches:
+            for player in (match["player1"], match["player2"]):
+                rounds_by_player[player].append(match["round"])
+        has_triple = any(
+            third == second + 1 and second == first + 1
+            for rounds in rounds_by_player
+            for first, second, third in zip(rounds, rounds[1:], rounds[2:])
+        )
+        has_double = any(
+            right == left + 1
+            for rounds in rounds_by_player
+            for left, right in zip(rounds, rounds[1:])
+        )
+        if not has_triple and (player_count < 5 * board_count or not has_double):
+            return matches
     result = _assign_strict_board_schedule(
-        matches, player_count, max(match["board"] for match in matches)
+        matches, player_count, board_count
     )
     if result is None:
         raise ScheduleError(
             "Geen geldig schema gevonden met volle blokrondes, vaste scheidsrechterrotatie "
-            "en gelijk verdeelde scheidsrechterbeurten. Probeer minder dartsblokken."
+            "en gelijk verdeelde scheidsrechterbeurten. Probeer minder dartsblokken, "
+            "wijzig het aantal spelers of pas het aantal wedstrijden per speler aan."
         )
     return result
 

@@ -91,6 +91,7 @@ De afronding naar boven is nodig wanneer het product oneven is. De laatste parti
 ### Ronden, blokken en rust
 
 - Een speler speelt maximaal één wedstrijd per ronde.
+- Als er minstens vijf spelers per actief blok zijn, plant de optimizer geen twee wedstrijden van dezelfde speler in opeenvolgende blokrondes. Bij lagere bezetting blijft alleen de grens van maximaal twee wedstrijden op rij hard; dubbele beurten worden geminimaliseerd.
 - De spelersronde komt uit round-robinfactoren. Alle games uit een spelersronde worden ingepland voordat spelers naar hun volgende ronde gaan.
 - Bij een oneven spelersaantal speelt de bye van iedere twee opeenvolgende factoren één kruiswedstrijd. In de oneven laatste spelersronde speelt de overblijver tegen de stroman.
 - Iedere wedstrijd bewaart per speler het persoonlijke spelersrondenummer; een kruiswedstrijd heeft daarom twee opeenvolgende nummers.
