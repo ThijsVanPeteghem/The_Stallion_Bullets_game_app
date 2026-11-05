@@ -1,5 +1,6 @@
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+import json
 
 
 class Season(models.Model):
@@ -87,6 +88,11 @@ class Match(models.Model):
         null=True,
         blank=True,
     )
+    player_rounds_json = models.TextField(
+        "speler rondes (JSON)",
+        default='{}',
+        help_text="JSON object met player_id -> round_number toewijzingen"
+    )
 
     class Meta:
         ordering = ["number"]
@@ -101,6 +107,17 @@ class Match(models.Model):
     @property
     def is_phantom_match(self):
         return self.player2_id is None
+
+    @property
+    def player_rounds(self):
+        try:
+            return json.loads(self.player_rounds_json)
+        except (json.JSONDecodeError, AttributeError):
+            return {}
+
+    @player_rounds.setter
+    def player_rounds(self, value):
+        self.player_rounds_json = json.dumps(value, default=str)
 
     @property
     def is_complete(self):

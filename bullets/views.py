@@ -258,19 +258,20 @@ def _evening_context(evening):
     player_round_overlaps = 0
     player_round_gaps_valid = True
     for match in matches:
-        match.player_rounds = {}
+        # Load player_rounds from the database instead of recalculating
+        # (JSON keys are strings, so check both int and str)
+        player_rounds = match.player_rounds
         for player_id in (match.player1_id, match.player2_id):
             if player_id is None:
                 continue
-            player_round_counts[player_id] += 1
-            match.player_rounds[player_id] = player_round_counts[player_id]
-            player_rounds_by_player.setdefault(player_id, []).append(
-                player_round_counts[player_id]
-            )
+            player_round = player_rounds.get(player_id) or player_rounds.get(str(player_id))
+            if player_round:
+                player_rounds_by_player.setdefault(player_id, []).append(player_round)
             block_rounds_by_player.setdefault(player_id, []).append(match.round_number)
-        match.player1_player_round = match.player_rounds.get(match.player1_id)
-        match.player2_player_round = match.player_rounds.get(match.player2_id)
-        if len(match.player_rounds) == 2:
+        match.player1_player_round = player_rounds.get(match.player1_id) or player_rounds.get(str(match.player1_id))
+        match.player2_player_round = player_rounds.get(match.player2_id) or player_rounds.get(str(match.player2_id))
+        # Only check player_round_difference if both players have valid rounds
+        if len(player_rounds) == 2 and match.player1_player_round is not None and match.player2_player_round is not None:
             player_round_difference = abs(
                 match.player1_player_round - match.player2_player_round
             )
@@ -551,21 +552,18 @@ def print_evening(request, evening_id):
         .prefetch_related("stats")
     )
     print_matches = []
-    player_round_counts = Counter()
     for match in matches:
         stats_by_player = {stat.player_id: stat for stat in match.stats.all()}
         players = [match.player1, match.player2]
         player_rows = []
-        match.player_rounds = {}
-        for player_id in (match.player1_id, match.player2_id):
-            if player_id is not None:
-                player_round_counts[player_id] += 1
-                match.player_rounds[player_id] = player_round_counts[player_id]
+        player_rounds = match.player_rounds  # Load from database instead of recalculating
         for player in players:
             stat = stats_by_player.get(player.id) if player else None
+            # JSON keys are strings, so check both int and str
+            player_round = (player_rounds.get(player.id) or player_rounds.get(str(player.id))) if player else None
             player_rows.append({
                 "player": player if player else "Stroman (virtuele tegenstander)",
-                "player_round": match.player_rounds.get(player.id) if player else None,
+                "player_round": player_round,
                 "legs_won": stat.legs_won if stat else None,
                 "is_stroman": bool(stat and stat.is_stroman),
                 "scores_171": (stat.scores_171 or None) if stat else None,
