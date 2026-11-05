@@ -141,7 +141,7 @@ class MatchResultForm(forms.Form):
         for prefix, player in players:
             stat = existing.get(player.id)
             values = {
-                "legs": (stat.legs_won if stat else None),
+                "legs": (stat.legs_won if stat and stat.legs_won is not None else 0),
                 "high_finishes": (stat.high_finishes if stat else ""),
                 "180": (stat.scores_180 if stat else 0),
                 "171": (stat.scores_171 if stat else 0),

@@ -1,10 +1,11 @@
 from collections import Counter
+import hashlib
 import json
 
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import EveningForm, MatchResultForm, PlayerEditForm, PlayerForm, SeasonForm
@@ -19,6 +20,24 @@ from .services import (
     sort_standings_for_ranking,
 )
 from .schedule import ScheduleError, StromanSelectionError, expected_match_count
+
+
+def _evening_live_token(evening):
+    stats_rows = list(
+        MatchPlayerStats.objects.filter(match__evening=evening)
+        .order_by("match_id", "player_id")
+        .values_list(
+            "match_id",
+            "player_id",
+            "legs_won",
+            "scores_171",
+            "scores_180",
+            "high_finishes",
+            "least_darts",
+        )
+    )
+    payload = json.dumps(stats_rows, ensure_ascii=False, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
 def home(request):
@@ -260,19 +279,17 @@ def _evening_context(evening):
     player_round_overlaps = 0
     player_round_gaps_valid = True
     for match in matches:
-        match.player_rounds = {}
         for player_id in (match.player1_id, match.player2_id):
             if player_id is None:
                 continue
             player_round_counts[player_id] += 1
-            match.player_rounds[player_id] = player_round_counts[player_id]
             player_rounds_by_player.setdefault(player_id, []).append(
                 player_round_counts[player_id]
             )
             block_rounds_by_player.setdefault(player_id, []).append(match.round_number)
-        match.player1_player_round = match.player_rounds.get(match.player1_id)
-        match.player2_player_round = match.player_rounds.get(match.player2_id)
-        if len(match.player_rounds) == 2:
+        if (len(match.player_rounds) == 2 and 
+            match.player1_player_round is not None and 
+            match.player2_player_round is not None):
             player_round_difference = abs(
                 match.player1_player_round - match.player2_player_round
             )
@@ -480,7 +497,21 @@ def evening_detail(request, evening_id):
 def evening_standings_view(request, evening_id):
     evening = get_object_or_404(Evening.objects.select_related("season"), pk=evening_id)
     context = _evening_context(evening)
+    context["live_token"] = _evening_live_token(evening)
     return render(request, "bullets/evening_standings.html", context)
+
+
+def evening_standings_live_state(request, evening_id):
+    evening = get_object_or_404(Evening, pk=evening_id)
+    complete_count = Match.objects.filter(evening=evening).filter(
+        stats__legs_won__isnull=False
+    ).distinct().count()
+    return JsonResponse(
+        {
+            "live_token": _evening_live_token(evening),
+            "complete_count": complete_count,
+        }
+    )
 
 
 def regenerate_schedule_view(request, evening_id):

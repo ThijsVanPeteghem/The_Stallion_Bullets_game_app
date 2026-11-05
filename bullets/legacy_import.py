@@ -2,6 +2,7 @@ from collections import Counter
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+import json
 import re
 import unicodedata
 
@@ -14,11 +15,107 @@ class LegacyImportError(ValueError):
     pass
 
 
+INACTIVE_IMPORT_PLAYER_NAMES = {"1", "unknown", "invaller"}
+
+
+def _should_mark_player_inactive(name):
+    normalized = unicodedata.normalize("NFC", name).casefold().strip()
+    return normalized in INACTIVE_IMPORT_PLAYER_NAMES
+
+
+@transaction.atomic
+def normalize_placeholder_referee_players():
+    placeholder_names = {"1", "unknown"}
+    all_players = list(Player.objects.all())
+    placeholder_players = [
+        player
+        for player in all_players
+        if unicodedata.normalize("NFC", player.name).casefold().strip()
+        in placeholder_names
+    ]
+    if not placeholder_players:
+        return {"merged_players": 0, "updated_matches": 0}
+
+    referee_player, _ = Player.objects.get_or_create(
+        name="Scheidsrechter",
+        defaults={"active": False},
+    )
+    if referee_player.active:
+        referee_player.active = False
+        referee_player.save(update_fields=["active"])
+
+    source_ids = [player.id for player in placeholder_players if player.id != referee_player.id]
+    if not source_ids:
+        return {"merged_players": 0, "updated_matches": 0}
+
+    for attendance in Attendance.objects.filter(player_id__in=source_ids).select_related("evening"):
+        if Attendance.objects.filter(
+            evening=attendance.evening,
+            player=referee_player,
+        ).exists():
+            attendance.delete()
+        else:
+            attendance.player = referee_player
+            attendance.save(update_fields=["player"])
+
+    Match.objects.filter(player1_id__in=source_ids).update(player1=referee_player)
+    Match.objects.filter(player2_id__in=source_ids).update(player2=referee_player)
+    Match.objects.filter(referee_id__in=source_ids).update(referee=referee_player)
+
+    for stat in MatchPlayerStats.objects.filter(player_id__in=source_ids).select_related("match"):
+        if MatchPlayerStats.objects.filter(
+            match=stat.match,
+            player=referee_player,
+        ).exists():
+            stat.delete()
+        else:
+            stat.player = referee_player
+            stat.save(update_fields=["player"])
+
+    updated_matches = 0
+    source_key_set = {str(source_id) for source_id in source_ids}
+    target_key = str(referee_player.id)
+    for match in Match.objects.all():
+        try:
+            player_rounds = json.loads(match.player_rounds_json or "{}")
+        except json.JSONDecodeError:
+            continue
+        changed = False
+        for source_key in source_key_set:
+            if source_key in player_rounds:
+                round_value = player_rounds.pop(source_key)
+                if target_key not in player_rounds:
+                    player_rounds[target_key] = round_value
+                changed = True
+        if changed:
+            match.player_rounds = player_rounds
+            match.save(update_fields=["player_rounds_json"])
+            updated_matches += 1
+
+    merged_players = 0
+    for source_player in placeholder_players:
+        if source_player.id == referee_player.id:
+            continue
+        source_player.delete()
+        merged_players += 1
+
+    return {"merged_players": merged_players, "updated_matches": updated_matches}
+
+
+def capitalize_name(name):
+    """Capitalize each word in a player name (e.g., 'thijs van peteghem' => 'Thijs Van Peteghem')."""
+    # Remove any suffixes like (stroman), (invaller), etc.
+    name = name.split('(')[0].strip()
+    return ' '.join(word.capitalize() for word in name.split())
+
+
 def apply_player_aliases(evenings, aliases):
+    # Keep track of original targets for proper capitalization
     normalized_aliases = {
-        unicodedata.normalize("NFC", source).casefold(): unicodedata.normalize(
-            "NFC", target
-        ).casefold()
+        unicodedata.normalize("NFC", source).casefold(): {
+            "target_casefold": unicodedata.normalize("NFC", target).casefold(),
+            "target_original": unicodedata.normalize("NFC", target),
+        }
         for source, target in aliases.items()
     }
 
@@ -27,7 +124,8 @@ def apply_player_aliases(evenings, aliases):
         # Determine which aliases would be safe to apply for this evening
         # An alias is safe if the source and target don't appear in the same match
         safe_aliases = {}
-        for source, target in normalized_aliases.items():
+        for source, target_info in normalized_aliases.items():
+            target_casefold = target_info["target_casefold"]
             # Check if both source and target appear together in any match
             conflict = False
             for match in evening["matches"]:
@@ -35,20 +133,22 @@ def apply_player_aliases(evenings, aliases):
                     unicodedata.normalize("NFC", p["name"]).casefold()
                     for p in match["players"]
                 }
-                if source in match_names and target in match_names:
+                if source in match_names and target_casefold in match_names:
                     conflict = True
                     break
             if not conflict:
-                safe_aliases[source] = target
+                safe_aliases[source] = target_info
         
-        # Apply safe aliases
+        # Apply safe aliases and capitalize names
         def apply_safe_alias(name):
             normalized = unicodedata.normalize("NFC", name).casefold()
             if normalized in safe_aliases:
-                # Return the casefold'd target, but we need the proper-cased version
-                # For now, just return what's in safe_aliases
-                return safe_aliases[normalized]
-            return unicodedata.normalize("NFC", name)
+                # Use the original target name (not casefolded)
+                target_name = safe_aliases[normalized]["target_original"]
+            else:
+                target_name = unicodedata.normalize("NFC", name)
+            # Capitalize each word in the name
+            return capitalize_name(target_name)
         
         evening["players"] = list(
             dict.fromkeys(apply_safe_alias(name) for name in evening["players"])
@@ -178,6 +278,12 @@ def parse_legacy_file(path, skip_player_count_validation=False):
             raise LegacyImportError(
                 f"{path.name}: wedstrijd {current['number']} moet precies twee spelers bevatten."
             )
+        
+        # Replace invalid player names ("1", "Unknown") with the referee name
+        for player in current["players"]:
+            if player["name"] in ("1", "Unknown"):
+                player["name"] = current["referee"]
+        
         if current["players"][0]["name"] == current["players"][1]["name"]:
             raise LegacyImportError(
                 f"{path.name}: wedstrijd {current['number']} bevat dezelfde speler twee keer: {current['players'][0]['name']!r}."
@@ -263,6 +369,14 @@ def parse_legacy_file(path, skip_player_count_validation=False):
     if not matches:
         raise LegacyImportError(f"{path.name}: geen wedstrijden gevonden.")
 
+    # Verify no invalid names remain in matches
+    for item in matches:
+        for player in item["players"]:
+            if player["name"] in ("1", "Unknown"):
+                raise LegacyImportError(
+                    f"{path.name}: wedstrijd {item['number']} bevat nog steeds een ongeldige speler '{player['name']}'."
+                )
+
     numbers = [item["number"] for item in matches]
     if numbers != list(range(1, len(matches) + 1)):
         raise LegacyImportError(f"{path.name}: wedstrijdnummers zijn niet aaneengesloten.")
@@ -270,6 +384,7 @@ def parse_legacy_file(path, skip_player_count_validation=False):
         player["name"]
         for item in matches
         for player in item["players"]
+        if player["name"] != "Unknown" and not player["name"].isdigit()
     )
     highest_appearance_count = max(appearances.values())
     stroman_candidates = [
@@ -338,6 +453,7 @@ def parse_legacy_file(path, skip_player_count_validation=False):
             player["name"]
             for item in matches
             for player in item["players"]
+            if player["name"] != "Unknown" and not player["name"].isdigit()
         )
     )
     referee_names = {
@@ -398,8 +514,15 @@ def import_legacy_evenings(evenings, season_name):
     for item in evenings:
         for name in item["players"]:
             key = unicodedata.normalize("NFC", name).casefold()
+            should_be_inactive = _should_mark_player_inactive(name)
             if key not in players_by_key:
-                players_by_key[key] = Player.objects.create(name=name)
+                players_by_key[key] = Player.objects.create(
+                    name=name,
+                    active=not should_be_inactive,
+                )
+            elif should_be_inactive and players_by_key[key].active:
+                players_by_key[key].active = False
+                players_by_key[key].save(update_fields=["active"])
 
         evening = Evening.objects.create(
             season=season,
@@ -417,8 +540,15 @@ def import_legacy_evenings(evenings, season_name):
             referee_name = match["referee"]
             if referee_name and referee_name not in player_records:
                 key = unicodedata.normalize("NFC", referee_name).casefold()
+                should_be_inactive = _should_mark_player_inactive(referee_name)
                 if key not in players_by_key:
-                    players_by_key[key] = Player.objects.create(name=referee_name)
+                    players_by_key[key] = Player.objects.create(
+                        name=referee_name,
+                        active=not should_be_inactive,
+                    )
+                elif should_be_inactive and players_by_key[key].active:
+                    players_by_key[key].active = False
+                    players_by_key[key].save(update_fields=["active"])
                 player_records[referee_name] = players_by_key[key]
         
         for draw_order, name in enumerate(item["players"], start=1):
@@ -438,6 +568,15 @@ def import_legacy_evenings(evenings, season_name):
                 player2=player_records[item_match["players"][1]["name"]],
                 referee=player_records[item_match["referee"]],
             )
+            
+            # Store player round numbers in JSON format
+            player_rounds = {}
+            for player_data in item_match["players"]:
+                player_id = player_records[player_data["name"]].id
+                player_rounds[str(player_id)] = item_match["player_round_number"]
+            match_record.player_rounds = player_rounds
+            match_record.save()
+            
             for player_data in item_match["players"]:
                 try:
                     MatchPlayerStats.objects.create(

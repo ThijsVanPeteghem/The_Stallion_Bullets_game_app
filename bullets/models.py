@@ -120,6 +120,18 @@ class Match(models.Model):
         self.player_rounds_json = json.dumps(value, default=str)
 
     @property
+    def player1_player_round(self):
+        """Get the player round number for player1"""
+        return self.player_rounds.get(str(self.player1_id))
+
+    @property
+    def player2_player_round(self):
+        """Get the player round number for player2 (if exists)"""
+        if self.player2_id:
+            return self.player_rounds.get(str(self.player2_id))
+        return None
+
+    @property
     def is_complete(self):
         stats = list(self.stats.all())
         expected = 1 if self.is_phantom_match else 2

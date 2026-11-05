@@ -8,7 +8,34 @@
 </div>
 {% include "bullets/evening_tabs.html" with active_tab="standings" %}
 <section class="panel">
-  <div class="section-heading"><h2>Klassement van de avond</h2><span class="muted">Wordt bijgewerkt na het invoeren van uitslagen</span></div>
+  <div class="section-heading"><h2>Klassement van de avond</h2><span class="muted">Wordt automatisch ververst na het invoeren van uitslagen</span></div>
   {% include "bullets/standings_table.html" with standings=standings show_progress=True %}
 </section>
+<script>
+  (function () {
+    const liveStateUrl = "{% url 'evening_standings_live_state' evening.id %}";
+    let currentToken = "{{ live_token }}";
+    const pollIntervalMs = 5000;
+
+    async function checkForUpdates() {
+      if (document.hidden) {
+        return;
+      }
+      try {
+        const response = await fetch(liveStateUrl, { cache: "no-store" });
+        if (!response.ok) {
+          return;
+        }
+        const state = await response.json();
+        if (state.live_token && state.live_token !== currentToken) {
+          window.location.reload();
+        }
+      } catch (error) {
+        console.warn("Live tussenstand kon niet worden ververst.", error);
+      }
+    }
+
+    window.setInterval(checkForUpdates, pollIntervalMs);
+  })();
+</script>
 {% endblock %}

@@ -7,6 +7,7 @@ from bullets.legacy_import import (
     LegacyImportError,
     apply_player_aliases,
     import_legacy_evenings,
+    normalize_placeholder_referee_players,
     parse_legacy_file,
 )
 
@@ -82,7 +83,9 @@ class Command(BaseCommand):
             "David VDM": "David Van de Mergel",
             "David V.d.Mergel": "David Van de Mergel",
             "DaniÃ«l De Winter": "Daniël De Winter",  # UTF-8 encoding issues
-            "Thijs V Petegem": "Thijs Van Peteghemu",
+            "Thijs V Petegem": "Thijs Van Peteghem",
+            "Thijs Van Peteghemu": "Thijs Van Peteghem",  # Fix typo
+            "Tommy De Bruyck": "Tommy De Bruck",
             "Wim VDK": "Wim Van De Keere",
             "Yves V Haezevelde": "Yves Van Haezevelde",
             "Bart Neckebroek": "Bart Neckebroeck",  # Typo: missing second 'e'
@@ -92,7 +95,7 @@ class Command(BaseCommand):
         automatic_aliases = common_aliases.copy()
         skip_validation = False
         if options["season"] == "2025-2026":
-            automatic_aliases["invaller Bart N."] = "Bart Neckebroeck"
+            automatic_aliases["invaller Bart N."] = "Invaller"
             skip_validation = True
 
         try:
@@ -148,5 +151,15 @@ class Command(BaseCommand):
                 self.style.SUCCESS(
                     f"Geïmporteerd: {evening.date:%d-%m-%Y} "
                     f"({evening.matches.count()} wedstrijden)."
+                )
+            )
+
+        normalization_result = normalize_placeholder_referee_players()
+        if normalization_result["merged_players"] > 0:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Placeholder-spelers samengevoegd naar 'Scheidsrechter': "
+                    f"{normalization_result['merged_players']} spelers, "
+                    f"{normalization_result['updated_matches']} wedstrijden bijgewerkt."
                 )
             )

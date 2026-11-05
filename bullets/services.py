@@ -30,11 +30,14 @@ def _create_matches(evening, players, stroman_player=None):
         player2 = players[item["player2"]] if isinstance(item["player2"], int) else None
         referee = players[item["referee"]] if isinstance(item["referee"], int) else None
         
-        # Prepare player_rounds mapping from player indices to round numbers
+        # Prepare player_rounds mapping from player indices to player IDs
         player_rounds = {}
-        for player_idx, round_num in item.get("player_rounds", {}).items():
-            if isinstance(player_idx, int):
-                player_rounds[players[player_idx].id] = round_num
+        player_rounds_data = item.get("player_rounds", {})
+        if player_rounds_data:
+            for player_idx, round_num in player_rounds_data.items():
+                # Convert player index (int) to player object ID
+                if isinstance(player_idx, int) and player_idx < len(players):
+                    player_rounds[str(players[player_idx].id)] = round_num
         
         match = Match.objects.create(
             evening=evening,
@@ -46,8 +49,9 @@ def _create_matches(evening, players, stroman_player=None):
             referee=referee,
         )
         # Set the player_rounds JSON field
-        match.player_rounds = player_rounds
-        match.save()
+        if player_rounds:
+            match.player_rounds = player_rounds
+            match.save()
         
         MatchPlayerStats.objects.create(
             match=match,
