@@ -357,7 +357,7 @@ class ScheduleTests(SimpleTestCase):
         )
 
 class LegacyImportTests(TestCase):
-    source_dir = settings.BASE_DIR / "old_format_data"
+    source_dir = settings.BASE_DIR / "old_format_data" / "2026-2027"
 
     def test_legacy_files_parse_with_results_and_stroman_designation(self):
         parsed = [
