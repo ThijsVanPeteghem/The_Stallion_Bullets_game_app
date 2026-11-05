@@ -175,10 +175,14 @@
     // Bouw dataset voor positie van elke speler
     const positionDatasets = [];
     colorIndex = 0;
+    let maxPositionValue = 1;
     
     for (const [playerId, playerData] of Object.entries(evolutionData)) {
       const positionData = sortedEventNumbers.map(eventNum => {
         const eventData = playerData.evenings.find(e => e.evening_num === eventNum);
+        if (eventData && eventData.position > maxPositionValue) {
+          maxPositionValue = eventData.position;
+        }
         return eventData ? eventData.position : null;
       });
       
