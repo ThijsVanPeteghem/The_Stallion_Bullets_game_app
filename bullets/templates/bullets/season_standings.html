@@ -32,6 +32,8 @@
   </nav>
   {% if selected_ranking == "evolution" %}
   <h2>Evolutie per speeldag</h2>
+  
+  <h3>Cumulatieve punten</h3>
   <p class="muted">Dit diagram toont hoe spelers zich door de competitie heen ontwikkelen. De Y-as toont de totale cumulatieve punten in het seizoen tot en met die speeldag.</p>
   
   <div style="margin-bottom: 15px;">
@@ -41,6 +43,18 @@
   
   <div id="evolution-chart-container" style="width: 100%; height: 500px;">
     <canvas id="evolution-chart"></canvas>
+  </div>
+
+  <h3 style="margin-top: 40px;">Plaats in klassement</h3>
+  <p class="muted">Dit diagram toont de evolutie van de plaats in het klassement (ranking) van elke speler over de verschillende speeldagen. Een lagere positie betekent hoger in het klassement.</p>
+  
+  <div style="margin-bottom: 15px;">
+    <button id="select-all-positions-btn" class="button button-secondary" style="margin-right: 10px;">Alles selecteren</button>
+    <button id="deselect-all-positions-btn" class="button button-secondary">Alles deselecteren</button>
+  </div>
+  
+  <div id="position-chart-container" style="width: 100%; height: 500px;">
+    <canvas id="position-chart"></canvas>
   </div>
   
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -153,6 +167,99 @@
         dataset.hidden = true;
       });
       chart.update();
+    });
+
+    // Tweede grafiek: Plaats in klassement
+    const ctxPosition = document.getElementById('position-chart').getContext('2d');
+    
+    // Bouw dataset voor positie van elke speler
+    const positionDatasets = [];
+    colorIndex = 0;
+    
+    for (const [playerId, playerData] of Object.entries(evolutionData)) {
+      const positionData = sortedEventNumbers.map(eventNum => {
+        const eventData = playerData.evenings.find(e => e.evening_num === eventNum);
+        return eventData ? eventData.position : null;
+      });
+      
+      positionDatasets.push({
+        label: playerData.name,
+        data: positionData,
+        borderColor: colors[colorIndex % colors.length],
+        backgroundColor: colors[colorIndex % colors.length] + '30',
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: colors[colorIndex % colors.length],
+        fill: false,
+        hidden: false
+      });
+      
+      colorIndex++;
+    }
+    
+    const positionChart = new Chart(ctxPosition, {
+      type: 'line',
+      data: {
+        labels: sortedEventNumbers.map(n => 'Speeldag ' + n),
+        datasets: positionDatasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: {
+              usePointStyle: true,
+              padding: 15,
+              font: {
+                size: 11
+              }
+            }
+          },
+          title: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            reverse: true,
+            min: 1,
+            max: 25,
+            ticks: {
+              stepSize: 1
+            },
+            title: {
+              display: true,
+              text: 'Plaats'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Speeldag'
+            }
+          }
+        }
+      }
+    });
+    
+    // Selecteer/Deselecteer knoppen voor positiegrafiek
+    document.getElementById('select-all-positions-btn').addEventListener('click', function() {
+      positionChart.data.datasets.forEach(dataset => {
+        dataset.hidden = false;
+      });
+      positionChart.update();
+    });
+    
+    document.getElementById('deselect-all-positions-btn').addEventListener('click', function() {
+      positionChart.data.datasets.forEach(dataset => {
+        dataset.hidden = true;
+      });
+      positionChart.update();
     });
   </script>
   {% else %}
