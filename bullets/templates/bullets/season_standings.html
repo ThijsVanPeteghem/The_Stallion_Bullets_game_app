@@ -172,17 +172,26 @@
     // Tweede grafiek: Plaats in klassement
     const ctxPosition = document.getElementById('position-chart').getContext('2d');
     
+    // Bepaal de laatste speeldag
+    const lastEventNumber = Math.max(...sortedEventNumbers);
+    
     // Bouw dataset voor positie van elke speler
     const positionDatasets = [];
     colorIndex = 0;
     let maxPositionValue = 1;
     
+    // Bepaal max positie ALLEEN van de laatste speeldag
+    for (const [playerId, playerData] of Object.entries(evolutionData)) {
+      const lastEventData = playerData.evenings.find(e => e.evening_num === lastEventNumber);
+      if (lastEventData && lastEventData.position > maxPositionValue) {
+        maxPositionValue = lastEventData.position;
+      }
+    }
+    
+    // Bouw nu de datasets met alle speeldagen
     for (const [playerId, playerData] of Object.entries(evolutionData)) {
       const positionData = sortedEventNumbers.map(eventNum => {
         const eventData = playerData.evenings.find(e => e.evening_num === eventNum);
-        if (eventData && eventData.position > maxPositionValue) {
-          maxPositionValue = eventData.position;
-        }
         return eventData ? eventData.position : null;
       });
       
@@ -231,10 +240,13 @@
         scales: {
           y: {
             reverse: true,
-            min: 1,
-            max: 25,
             ticks: {
-              stepSize: 1
+              callback: function(value) {
+                if (Number.isInteger(value)) {
+                  return value;
+                }
+                return '';
+              }
             },
             title: {
               display: true,
