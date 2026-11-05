@@ -21,14 +21,14 @@ De twee startbestanden en **Database archiveren.bat** staan direct in de project
 
 Bij de eerste start installeert het script zo nodig de benodigde Python-onderdelen. Daarna wordt de database bijgewerkt en opent de applicatie vanzelf in de browser. Laat het zwarte venster open zolang je de applicatie gebruikt; sluit de app met `Ctrl+C` in dat venster. Start niet beide tegelijk, want ze gebruiken hetzelfde webadres.
 
-De scripts verwachten Python 3. Als Python nog niet is geïnstalleerd, installeer het dan via <https://www.python.org/downloads/> en probeer opnieuw.
+De scripts dwingen Python **3.12** af voor alle app-acties (opstarten, import en archiveren), zodat er geen versieconflicten kunnen ontstaan. Als Python 3.12 ontbreekt proberen de scripts dit automatisch te installeren (`py install 3.12` en daarna `winget install Python.Python.3.12`). Python 3.13+ werkt momenteel niet omdat `ortools` daar nog geen geschikte distributie voor aanbiedt. Als automatische installatie niet lukt, installeer Python 3.12 handmatig via <https://www.python.org/downloads/> en probeer opnieuw.
 
 Je kunt de applicatie ook handmatig starten vanuit PowerShell in deze map:
 
 ```powershell
-python -m pip install -r config\requirements.txt
-python scripts\manage.py migrate
-python scripts\manage.py runserver
+py -3.12 -m pip install -r config\requirements.txt
+py -3.12 scripts\manage.py migrate
+py -3.12 scripts\manage.py runserver
 ```
 
 Open daarna <http://127.0.0.1:8000>.
@@ -41,8 +41,8 @@ Gebruik bijvoorbeeld een aparte database om te testen:
 
 ```powershell
 $env:DATABASE_NAME = "data\competitie-test.sqlite3"
-python scripts\manage.py migrate
-python scripts\manage.py runserver
+py -3.12 scripts\manage.py migrate
+py -3.12 scripts\manage.py runserver
 ```
 
 In datzelfde PowerShell-venster gebruiken ook andere Django-commando's, zoals `createsuperuser` en `migrate`, deze testdatabase. De app maakt het databasebestand aan wanneer dat nodig is. Sluit het venster of voer dit uit om terug te keren naar de standaarddatabase `data\competitie.sqlite3`:
@@ -55,16 +55,16 @@ Je kunt meerdere testdatabases maken met verschillende namen, bijvoorbeeld `comp
 
 ```powershell
 $env:DATABASE_NAME = "C:\data\competitie-productie.sqlite3"
-python scripts\manage.py migrate
-python scripts\manage.py runserver
+py -3.12 scripts\manage.py migrate
+py -3.12 scripts\manage.py runserver
 ```
 
-Voer `migrate` voor elke database uit die je gebruikt. Django's automatische test-runner maakt voor `python scripts\manage.py test` een aparte, tijdelijke testdatabase aan op basis van de gekozen instellingen. Gebruik geen productiegegevens in een testkopie zonder die eerst te anonimiseren.
+Voer `migrate` voor elke database uit die je gebruikt. Django's automatische test-runner maakt voor `py -3.12 scripts\manage.py test` een aparte, tijdelijke testdatabase aan op basis van de gekozen instellingen. Gebruik geen productiegegevens in een testkopie zonder die eerst te anonimiseren.
 
 Om de app bereikbaar te maken op apparaten op hetzelfde wifi-netwerk:
 
 ```powershell
-python scripts\manage.py runserver 0.0.0.0:8000
+py -3.12 scripts\manage.py runserver 0.0.0.0:8000
 ```
 
 Zoek op de laptop het lokale IPv4-adres met `ipconfig`; open op een ander apparaat `http://<lokaal-ip-adres>:8000`. Sta Python eventueel toe in Windows Firewall voor het privé-netwerk. Deze eerste versie heeft geen gebruikersaccounts en is bedoeld voor een vertrouwd lokaal netwerk, niet voor rechtstreekse publicatie op het internet.
@@ -106,14 +106,14 @@ Om een database opnieuw te beginnen, stop je de app, start je **scripts\Database
 De twee tekstbestanden in `old_format_data` kunnen na het migreren van de database met dit commando worden geïmporteerd. Controleer eerst de bronbestanden zonder iets op te slaan:
 
 ```powershell
-python scripts\manage.py migrate
-python scripts\manage.py import_legacy_data --dry-run
+py -3.12 scripts\manage.py migrate
+py -3.12 scripts\manage.py import_legacy_data --dry-run
 ```
 
 Voer de import daarna uit in de gekozen database:
 
 ```powershell
-python scripts\manage.py import_legacy_data
+py -3.12 scripts\manage.py import_legacy_data
 ```
 
 De import maakt seizoen `2026-2027`, spelers, aanwezigheden, wedstrijdschema's, schrijvers, uitslagen en statistieken aan. De stroman wordt afgeleid uit de speler met één extra optreden, die ook in de laatste partij moet staan; een eventuele `*`-markering in het bronbestand is niet vereist. De stroman krijgt geen match-, winst/verlies- of legtotalen uit diens extra partij, maar de geregistreerde worpen, finishes en pijlen blijven meetellen. De import stopt als een speeldag met dezelfde datum al bestaat. Bronbestanden worden niet aangepast.
@@ -121,11 +121,11 @@ De import maakt seizoen `2026-2027`, spelers, aanwezigheden, wedstrijdschema's, 
 Bij een bekende schrijfvariant kan een expliciete naamkoppeling worden meegegeven, bijvoorbeeld:
 
 ```powershell
-python scripts\manage.py import_legacy_data --alias "Oude naam=Juiste naam"
+py -3.12 scripts\manage.py import_legacy_data --alias "Oude naam=Juiste naam"
 ```
 
 ## Tests
 
 ```powershell
-python scripts\manage.py test bullets
+py -3.12 scripts\manage.py test bullets
 ```

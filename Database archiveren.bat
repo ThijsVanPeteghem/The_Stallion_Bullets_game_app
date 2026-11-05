@@ -18,22 +18,14 @@ set "APP_MODE=Sandbox"
 set "DATABASE_NAME=data\competitie-sandbox.sqlite3"
 
 :selected
-where py >nul 2>&1
-if not errorlevel 1 (
-    set "PYTHON=py -3"
-) else (
-    set "PYTHON=python"
-)
-
-%PYTHON% --version >nul 2>&1
+call "%~dp0scripts\ensure_python312.bat"
 if errorlevel 1 (
-    echo Python 3 is niet gevonden. Installeer Python en probeer opnieuw.
     goto end
 )
 
 echo.
 echo Snapshot maken van %APP_MODE%...
-%PYTHON% scripts\manage.py snapshot_database --output-dir "%~dp0database_snapshots"
+%PYTHON_CMD% scripts\manage.py snapshot_database --output-dir "%~dp0database_snapshots"
 if errorlevel 1 (
     echo.
     echo Het database snapshot kon niet worden gemaakt.

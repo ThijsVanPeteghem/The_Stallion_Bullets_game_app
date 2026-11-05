@@ -15,6 +15,12 @@ if not exist "manage.py" (
     exit /b 1
 )
 
+call "%~dp0ensure_python312.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+
 REM Delete existing database to start fresh
 echo [0/4] Clearing database...
 echo ========================================
@@ -29,7 +35,7 @@ echo.
 REM Run database migrations
 echo [1/4] Setting up database...
 echo ========================================
-python manage.py migrate
+%PYTHON_CMD% manage.py migrate
 if errorlevel 1 (
     echo.
     echo Error: Failed to initialize database.
@@ -43,7 +49,7 @@ echo.
 REM Import 2025-2026 season
 echo [2/4] Importing 2025-2026 season...
 echo ========================================
-python manage.py import_legacy_data --season 2025-2026
+%PYTHON_CMD% manage.py import_legacy_data --season 2025-2026
 if errorlevel 1 (
     echo.
     echo Error: Failed to import 2025-2026 season.
@@ -57,7 +63,7 @@ echo.
 REM Import 2026-2027 season
 echo [3/4] Importing 2026-2027 season...
 echo ========================================
-python manage.py import_legacy_data --season 2026-2027
+%PYTHON_CMD% manage.py import_legacy_data --season 2026-2027
 if errorlevel 1 (
     echo.
     echo Error: Failed to import 2026-2027 season.

@@ -18,6 +18,12 @@ if not exist "manage.py" (
     exit /b 1
 )
 
+call "%~dp0ensure_python312.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+
 REM Delete existing database
 echo [1/3] Clearing database...
 echo ========================================
@@ -32,7 +38,7 @@ echo.
 REM Run database migrations
 echo [2/3] Applying migrations...
 echo ========================================
-python manage.py migrate
+%PYTHON_CMD% manage.py migrate
 if errorlevel 1 (
     echo.
     echo Error: Failed to apply migrations.
@@ -47,7 +53,7 @@ echo Please wait for the server to be ready (watch for "Starting development ser
 echo.
 
 REM Start server in a new window so it keeps running
-start "Stallion Bullets Server" cmd /k python manage.py runserver 0.0.0.0:8000
+start "Stallion Bullets Server" cmd /k %PYTHON_CMD% manage.py runserver 0.0.0.0:8000
 
 REM Wait for server to start (give it 5 seconds)
 timeout /t 5 /nobreak
