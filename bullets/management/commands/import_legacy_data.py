@@ -72,13 +72,27 @@ class Command(BaseCommand):
         if not paths:
             raise CommandError(f"Geen speeldagbestanden gevonden in {source}.")
 
-        # Voeg standaard aliases toe voor het 2025-2026 seizoen
-        automatic_aliases = {}
+        # Voeg standaard aliases toe (geldt voor beide seizoenen)
+        common_aliases = {
+            "Martijn V Caneghem": "Martijn Van Caneghem",
+            "Mathis DK": "Mathis De Keulenaer",
+            "Maarten DK": "Maarten De Keulenaer",
+            "Maaren V Haezevelde": "Maaren Van Haezevelde",
+            "Jordy VDK": "Jordy Van De Keere",
+            "David VDM": "David Van de Mergel",
+            "David V.d.Mergel": "David Van de Mergel",
+            "DaniÃ«l De Winter": "Daniël De Winter",  # UTF-8 encoding issues
+            "Thijs V Petegem": "Thijs Van Peteghemu",
+            "Wim VDK": "Wim Van De Keere",
+            "Yves V Haezevelde": "Yves Van Haezevelde",
+            "Bart Neckebroek": "Bart Neckebroeck",  # Typo: missing second 'e'
+        }
+        
+        # Seizoen-specifieke aliases
+        automatic_aliases = common_aliases.copy()
         skip_validation = False
         if options["season"] == "2025-2026":
-            automatic_aliases = {
-                "invaller Bart N.": "Bart De Graeve",
-            }
+            automatic_aliases["invaller Bart N."] = "Bart Neckebroeck"
             skip_validation = True
 
         try:
