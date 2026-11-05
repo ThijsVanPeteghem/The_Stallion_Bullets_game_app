@@ -42,10 +42,6 @@
       </div>
     </div>
     <p id="board-capacity-note" class="small-field-note" aria-live="polite">Voor 4 blokken zijn minimaal 12 deelnemers nodig.</p>
-    <div id="board-rest-advice" class="small-field-note" hidden>
-      <span id="board-rest-advice-text" role="status"></span>
-      <button class="button button-secondary" type="button" id="apply-board-rest-advice"></button>
-    </div>
     <div class="section-heading selection-heading">
       <div><h2>Aanwezige spelers</h2><p class="muted">Vink spelers aan in de gelote volgorde (4–128).</p></div>
       <span id="selection-count" class="badge">0 geselecteerd</span>
@@ -56,6 +52,10 @@
     {% else %}
       <p class="muted">Er staan nog geen actieve spelers in de spelerslijst. Voeg ze eerst toe via <a href="{% url 'players' %}">Spelers</a>.</p>
     {% endif %}
+    <div id="board-rest-advice" class="small-field-note" hidden>
+      <span id="board-rest-advice-text" role="status"></span>
+      <button class="button button-secondary" type="button" id="apply-board-rest-advice"></button>
+    </div>
     <p id="small-field-note" class="small-field-note optional-field-note" hidden></p>
     <div class="selection-order">
       <strong>Lotingsvolgorde</strong>

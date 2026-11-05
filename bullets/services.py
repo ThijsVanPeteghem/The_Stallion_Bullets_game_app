@@ -270,3 +270,46 @@ def _rank_season_standings(attendances, matches):
             row["player"].name.casefold(),
         ),
     )
+
+
+def season_evolution(season):
+    """Bouwt evolutiegegevens per speeldag voor alle spelers - CUMULATIEF."""
+    evenings = season.evenings.order_by("date", "pk")
+    evolution_data = {}
+    evening_ids = []
+    
+    for evening_num, evening in enumerate(evenings, start=1):
+        evening_ids.append(evening.pk)
+        
+        # Verzamel alle attendances en matches tot en met deze speeldag (CUMULATIEF)
+        attendances = list(
+            Attendance.objects.filter(evening_id__in=evening_ids)
+            .select_related("player", "evening")
+            .order_by("evening__date", "evening_id", "draw_order")
+        )
+        matches = list(
+            Match.objects.filter(evening_id__in=evening_ids)
+            .select_related("player1", "player2", "referee")
+            .prefetch_related("stats")
+        )
+        
+        standings = _rank_season_standings(attendances, matches)
+        
+        for position, row in enumerate(standings, start=1):
+            player_id = row["player"].id
+            player_name = row["player"].name
+            
+            if player_id not in evolution_data:
+                evolution_data[player_id] = {
+                    "name": player_name,
+                    "evenings": []
+                }
+            
+            evolution_data[player_id]["evenings"].append({
+                "evening_num": evening_num,
+                "date": evening.date.isoformat(),
+                "points": row["points"],
+                "position": position
+            })
+    
+    return evolution_data
