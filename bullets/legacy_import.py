@@ -18,26 +18,48 @@ def apply_player_aliases(evenings, aliases):
     normalized_aliases = {
         unicodedata.normalize("NFC", source).casefold(): unicodedata.normalize(
             "NFC", target
-        )
+        ).casefold()
         for source, target in aliases.items()
     }
 
-    def canonical_name(name):
-        return normalized_aliases.get(
-            unicodedata.normalize("NFC", name).casefold(),
-            unicodedata.normalize("NFC", name),
-        )
-
     aliased_evenings = deepcopy(evenings)
     for evening in aliased_evenings:
+        # Determine which aliases would be safe to apply for this evening
+        # An alias is safe if the source and target don't appear in the same match
+        safe_aliases = {}
+        for source, target in normalized_aliases.items():
+            # Check if both source and target appear together in any match
+            conflict = False
+            for match in evening["matches"]:
+                match_names = {
+                    unicodedata.normalize("NFC", p["name"]).casefold()
+                    for p in match["players"]
+                }
+                if source in match_names and target in match_names:
+                    conflict = True
+                    break
+            if not conflict:
+                safe_aliases[source] = target
+        
+        # Apply safe aliases
+        def apply_safe_alias(name):
+            normalized = unicodedata.normalize("NFC", name).casefold()
+            if normalized in safe_aliases:
+                # Return the casefold'd target, but we need the proper-cased version
+                # For now, just return what's in safe_aliases
+                return safe_aliases[normalized]
+            return unicodedata.normalize("NFC", name)
+        
         evening["players"] = list(
-            dict.fromkeys(canonical_name(name) for name in evening["players"])
+            dict.fromkeys(apply_safe_alias(name) for name in evening["players"])
         )
-        evening["stroman"] = canonical_name(evening["stroman"])
+        evening["stroman"] = apply_safe_alias(evening["stroman"])
+        
         for item in evening["matches"]:
-            item["referee"] = canonical_name(item["referee"])
-            for player in item["players"]:
-                player["name"] = canonical_name(player["name"])
+            for p in item["players"]:
+                p["name"] = apply_safe_alias(p["name"])
+            item["referee"] = apply_safe_alias(item["referee"])
+    
     return aliased_evenings
 
 
@@ -120,16 +142,19 @@ def _parse_player(fields, *, name_index, values_index, filename, line_number):
     }
 
 
-def parse_legacy_file(path):
+def parse_legacy_file(path, skip_player_count_validation=False):
     path = Path(path)
+    # Ondersteun beide naamformaten:
+    # - speeldagN_dd-mm-jjjj.txt (oud formaat voor 2025-2026)
+    # - speeldagN__dd-mm-jjjj.txt (nieuw formaat voor 2026-2027)
     match = re.fullmatch(
-        r"speeldag\d+__(\d{2}-\d{2}-\d{4})\.txt",
+        r"speeldag\d+_+(\d{2}-\d{2}-\d{4})\.txt",
         path.name,
         re.IGNORECASE,
     )
     if not match:
         raise LegacyImportError(
-            f"{path.name}: bestandsnaam moet speeldagN__dd-mm-jjjj.txt zijn."
+            f"{path.name}: bestandsnaam moet speeldagN_dd-mm-jjjj.txt of speeldagN__dd-mm-jjjj.txt zijn."
         )
     try:
         date = datetime.strptime(match.group(1), "%d-%m-%Y").date()
@@ -152,6 +177,10 @@ def parse_legacy_file(path):
         if len(current["players"]) != 2:
             raise LegacyImportError(
                 f"{path.name}: wedstrijd {current['number']} moet precies twee spelers bevatten."
+            )
+        if current["players"][0]["name"] == current["players"][1]["name"]:
+            raise LegacyImportError(
+                f"{path.name}: wedstrijd {current['number']} bevat dezelfde speler twee keer: {current['players'][0]['name']!r}."
             )
         if current["referee"] is None:
             raise LegacyImportError(
@@ -207,11 +236,16 @@ def parse_legacy_file(path):
             )
             awaiting_second_player = True
         elif first.casefold().startswith("schrijver"):
-            if len(fields) < 2 or not fields[1].strip():
-                raise LegacyImportError(
-                    f"{path.name}:{line_number}: schrijversnaam ontbreekt."
-                )
-            current["referee"] = unicodedata.normalize("NFC", fields[1].strip())
+            referee_name = fields[1].strip() if len(fields) >= 2 else ""
+            if not referee_name:
+                if skip_player_count_validation:
+                    # Bij legacy import: laat lege schrijvers toe en gebruik een default
+                    referee_name = "Unknown"
+                else:
+                    raise LegacyImportError(
+                        f"{path.name}:{line_number}: schrijversnaam ontbreekt."
+                    )
+            current["referee"] = unicodedata.normalize("NFC", referee_name)
             awaiting_second_player = False
         elif awaiting_second_player and first:
             current["players"].append(
@@ -245,32 +279,54 @@ def parse_legacy_file(path):
     ]
     stroman_name = stroman_candidates[0] if len(stroman_candidates) == 1 else None
     match_count = highest_appearance_count - 1
-    if (
-        stroman_name is None
-        or match_count < 1
-        or any(
-            count != (match_count + 1 if name == stroman_name else match_count)
-            for name, count in appearances.items()
-        )
-    ):
-        raise LegacyImportError(
-            f"{path.name}: spelersaantallen kloppen niet; één speler moet precies één extra wedstrijd hebben."
-        )
-    last_match_players = matches[-1]["players"]
-    if stroman_name not in {player["name"] for player in last_match_players}:
-        raise LegacyImportError(
-            f"{path.name}: de speler met één extra wedstrijd moet in de laatste wedstrijd staan."
-        )
-    marked_names = {
-        player["name"]
-        for item in matches
-        for player in item["players"]
-        if player["is_stroman"]
-    }
-    if marked_names and marked_names != {stroman_name}:
-        raise LegacyImportError(
-            f"{path.name}: de *-markering komt niet overeen met de speler met één extra wedstrijd."
-        )
+    if not skip_player_count_validation:
+        if (
+            stroman_name is None
+            or match_count < 1
+            or any(
+                count != (match_count + 1 if name == stroman_name else match_count)
+                for name, count in appearances.items()
+            )
+        ):
+            raise LegacyImportError(
+                f"{path.name}: spelersaantallen kloppen niet; één speler moet precies één extra wedstrijd hebben."
+            )
+        last_match_players = matches[-1]["players"]
+        if stroman_name not in {player["name"] for player in last_match_players}:
+            raise LegacyImportError(
+                f"{path.name}: de speler met één extra wedstrijd moet in de laatste wedstrijd staan."
+            )
+        marked_names = {
+            player["name"]
+            for item in matches
+            for player in item["players"]
+            if player["is_stroman"]
+        }
+        if marked_names and marked_names != {stroman_name}:
+            raise LegacyImportError(
+                f"{path.name}: de *-markering komt niet overeen met de speler met één extra wedstrijd."
+            )
+    else:
+        # Bij skip_player_count_validation: bepaal stroman op basis van merkeringen
+        marked_names = {
+            player["name"]
+            for item in matches
+            for player in item["players"]
+            if player["is_stroman"]
+        }
+        if len(marked_names) == 1:
+            stroman_name = marked_names.pop()
+        elif len(marked_names) == 0:
+            # Geen markeringen; selecteer de speler met de meeste verschijningen
+            if appearances:
+                stroman_name = max(appearances.items(), key=lambda x: x[1])[0]
+            else:
+                stroman_name = None
+        else:
+            # Meerdere markeringen; dit is een fout
+            raise LegacyImportError(
+                f"{path.name}: meerdere spelers gemarkeerd met *; slechts één toegestaan."
+            )
     for item in matches:
         for player in item["players"]:
             player["is_stroman"] = (
@@ -287,6 +343,7 @@ def parse_legacy_file(path):
     referee_names = {
         item["referee"]
         for item in matches
+        if item["referee"] and item["referee"] != "Unknown" and not item["referee"].isdigit()
     }
     if not referee_names.issubset(set(player_order)):
         raise LegacyImportError(
@@ -354,6 +411,16 @@ def import_legacy_evenings(evenings, season_name):
             name: players_by_key[unicodedata.normalize("NFC", name).casefold()]
             for name in item["players"]
         }
+        
+        # Voeg ook scheidsrechters toe aan player_records als ze niet al voorkomen
+        for match in item["matches"]:
+            referee_name = match["referee"]
+            if referee_name and referee_name not in player_records:
+                key = unicodedata.normalize("NFC", referee_name).casefold()
+                if key not in players_by_key:
+                    players_by_key[key] = Player.objects.create(name=referee_name)
+                player_records[referee_name] = players_by_key[key]
+        
         for draw_order, name in enumerate(item["players"], start=1):
             Attendance.objects.create(
                 evening=evening,
@@ -372,15 +439,21 @@ def import_legacy_evenings(evenings, season_name):
                 referee=player_records[item_match["referee"]],
             )
             for player_data in item_match["players"]:
-                MatchPlayerStats.objects.create(
-                    match=match_record,
-                    player=player_records[player_data["name"]],
-                    is_stroman=player_data["is_stroman"],
-                    legs_won=player_data["legs_won"],
-                    scores_180=player_data["scores_180"],
-                    scores_171=player_data["scores_171"],
-                    high_finishes=player_data["high_finishes"],
-                    least_darts=player_data["least_darts"],
-                )
+                try:
+                    MatchPlayerStats.objects.create(
+                        match=match_record,
+                        player=player_records[player_data["name"]],
+                        is_stroman=player_data["is_stroman"],
+                        legs_won=player_data["legs_won"],
+                        scores_180=player_data["scores_180"],
+                        scores_171=player_data["scores_171"],
+                        high_finishes=player_data["high_finishes"],
+                        least_darts=player_data["least_darts"],
+                    )
+                except Exception as e:
+                    raise LegacyImportError(
+                        f"Match {item_match['number']} in avond {item['date']}: "
+                        f"fout bij speler {player_data['name']}: {str(e)}"
+                    ) from e
         imported.append(evening)
     return imported

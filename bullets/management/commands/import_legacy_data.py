@@ -17,13 +17,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--source",
-            default=str(settings.BASE_DIR / "old_format_data"),
-            help="Bestand of map met speeldagN__dd-mm-jjjj.txt bestanden.",
+            default=None,
+            help="Bestand of map met speeldagN__dd-mm-jjjj.txt bestanden. "
+                 "Standaard wordt deze bepaald op basis van --season.",
         )
         parser.add_argument(
             "--season",
             default="2026-2027",
-            help="Naam van het seizoen waarin de avonden worden geplaatst.",
+            help="Naam van het seizoen waarin de avonden worden geplaatst. "
+                 "Ondersteunde waarden: 2025-2026, 2026-2027. "
+                 "Dit bepaalt ook de mapstructuur.",
         )
         parser.add_argument(
             "--dry-run",
@@ -39,7 +42,27 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        source = Path(options["source"])
+        # Bepaal de bronmap op basis van het seizoen
+        if options["source"] is None:
+            base_path = settings.BASE_DIR / "old_format_data"
+            season = options["season"]
+            
+            # Map de seizoennaam naar de mapnaam
+            season_dir_map = {
+                "2025-2026": "2025_2026",
+                "2026-2027": "2026-2027",
+            }
+            
+            if season not in season_dir_map:
+                raise CommandError(
+                    f"Onbekend seizoen: {season}. "
+                    f"Ondersteunde seizoenen: {', '.join(season_dir_map.keys())}"
+                )
+            
+            source = base_path / season_dir_map[season]
+        else:
+            source = Path(options["source"])
+        
         if source.is_dir():
             paths = sorted(source.glob("speeldag*.txt"))
         elif source.is_file():
@@ -49,15 +72,25 @@ class Command(BaseCommand):
         if not paths:
             raise CommandError(f"Geen speeldagbestanden gevonden in {source}.")
 
+        # Voeg standaard aliases toe voor het 2025-2026 seizoen
+        automatic_aliases = {}
+        skip_validation = False
+        if options["season"] == "2025-2026":
+            automatic_aliases = {
+                "invaller Bart N.": "Bart De Graeve",
+            }
+            skip_validation = True
+
         try:
-            parsed = [parse_legacy_file(path) for path in paths]
+            parsed = [parse_legacy_file(path, skip_player_count_validation=skip_validation) for path in paths]
         except LegacyImportError as error:
             raise CommandError(str(error)) from error
         parsed.sort(key=lambda item: item["date"])
 
         if len({item["date"] for item in parsed}) != len(parsed):
             raise CommandError("De bronbestanden bevatten dubbele speeldagdatums.")
-        aliases = {}
+        
+        aliases = automatic_aliases.copy()
         for alias in options["alias"]:
             if "=" not in alias:
                 raise CommandError(

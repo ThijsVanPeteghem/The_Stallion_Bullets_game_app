@@ -1,0 +1,232 @@
+W1	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Wesley Ghislain	3				
+Tommy De Bruyck	0				
+Schrijver	Peter Eeckhout
+W2	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Noah Crombeen	0				
+Bart De Graeve	3				
+Schrijver	Kristof Baele
+W3	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Yves Bertini	2	1			
+Peter Impe	1				
+Schrijver	Maaren Van Haezevelde
+W4	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Leander Caron	0				
+Jordy Van De Keere	3				
+Schrijver	Peter Eeckhout
+W5	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Daniël De Winter	0				
+Maarten De Keulenaer	3			117	
+Schrijver	Wesley Ghislain
+W6	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Bart Neckebroeck	3			71	
+Tim De Neve	0				
+Schrijver	Noah Crombeen
+W7	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Patrick Monie	0				
+David Van de Mergel	3				
+Schrijver	Yves Bertini
+W8	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Noah Van Acker	0				
+Wim Van De Keere	3				
+Schrijver	Leander Caron
+W9	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Lode De Moor	3				
+Martijn Van Caneghem	0				
+Schrijver	Daniël De Winter
+W10	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Jhonny Verdonck	3				
+Peter Eeckhout	0				
+Schrijver	Bart Neckebroeck
+W11	RONDE 1	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Kristof Baele	1				
+Maaren Van Haezevelde	2				
+Schrijver	Patrick Monie
+W12	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Yves Van Haezevelde	1				
+Tommy De Bruyck	2				
+Schrijver	Noah Van Acker
+W13	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Wesley Ghislain	3				
+Bart De Graeve	0				
+Schrijver	Lode De Moor
+W14	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Noah Crombeen	1				
+Peter Impe	2				
+Schrijver	Jhonny Verdonck
+W15	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Yves Bertini	3		1		
+Jordy Van De Keere	0				
+Schrijver	Kristof Baele
+W16	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Leander Caron	0				
+Maarten De Keulenaer	3	1			
+Schrijver	Peter Eeckhout
+W17	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Daniël De Winter	3				
+Tim De Neve	0				
+Schrijver	Bart De Graeve
+W18	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Bart Neckebroeck	0				
+David Van de Mergel	3	1			
+Schrijver	Peter Impe
+W19	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Patrick Monie	0				
+Wim Van De Keere	3				
+Schrijver	Jordy Van De Keere
+W20	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Noah Van Acker	1				
+Martijn Van Caneghem	2				
+Schrijver	Maarten De Keulenaer
+W21	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Lode De Moor	2				
+Peter Eeckhout	1				
+Schrijver	Tim De Neve
+W22	RONDE 2	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Jhonny Verdonck	2				
+Maaren Van Haezevelde	1				
+Schrijver	David Van de Mergel
+W23	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Kristof Baele	1				
+Tommy De Bruyck	2				
+Schrijver	Wim Van De Keere
+W24	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Yves Van Haezevelde	3				
+Bart De Graeve	0				
+Schrijver	Martijn Van Caneghem
+W25	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Wesley Ghislain	2				
+Peter Impe	1				
+Schrijver	Peter Eeckhout
+W26	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Noah Crombeen	2				
+Jordy Van De Keere	1	1			
+Schrijver	Maaren Van Haezevelde
+W27	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Yves Bertini	1				
+Maarten De Keulenaer	2				
+Schrijver	Tommy De Bruyck
+W28	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Leander Caron	0				
+Tim De Neve	3				
+Schrijver	Bart De Graeve
+W29	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Daniël De Winter	3				
+David Van de Mergel	0				
+Schrijver	Peter Impe
+W30	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Bart Neckebroeck	2				
+Wim Van De Keere	1				
+Schrijver	Jordy Van De Keere
+W31	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Patrick Monie	0				
+Martijn Van Caneghem	3				
+Schrijver	Maarten De Keulenaer
+W32	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Noah Van Acker	0				
+Peter Eeckhout	3				
+Schrijver	Tim De Neve
+W33	RONDE 3	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Lode De Moor	3				
+Maaren Van Haezevelde	0				
+Schrijver	David Van de Mergel
+W34	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Jhonny Verdonck	2				
+Tommy De Bruyck	1				
+Schrijver	Wim Van De Keere
+W35	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Kristof Baele	2				
+Bart De Graeve	1				
+Schrijver	Martijn Van Caneghem
+W36	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Yves Van Haezevelde	2				
+Peter Impe	1				
+Schrijver	Peter Eeckhout
+W37	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Wesley Ghislain	3			102	
+Jordy Van De Keere	0				
+Schrijver	Maaren Van Haezevelde
+W38	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Noah Crombeen	1				
+Maarten De Keulenaer	2				
+Schrijver	Tommy De Bruyck
+W39	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Yves Bertini	3				
+Tim De Neve	0				
+Schrijver	Bart De Graeve
+W40	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Leander Caron	0				
+David Van de Mergel	3				
+Schrijver	Peter Impe
+W41	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Daniël De Winter	1				
+Wim Van De Keere	2				
+Schrijver	Wesley Ghislain
+W42	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Bart Neckebroeck	0				
+Martijn Van Caneghem	3				
+Schrijver	Noah Crombeen
+W43	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Patrick Monie	0				
+Peter Eeckhout	3				
+Schrijver	Yves Bertini
+W44	RONDE 4	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Noah Van Acker	1				
+Maaren Van Haezevelde	2				
+Schrijver	Leander Caron
+W45	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Lode De Moor	1				
+Tommy De Bruyck	2				
+Schrijver	Daniël De Winter
+W46	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Jhonny Verdonck	3				
+Bart De Graeve	0				
+Schrijver	Bart Neckebroeck
+W47	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Kristof Baele	2				
+Peter Impe	1				
+Schrijver	Patrick Monie
+W48	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Yves Van Haezevelde	3				
+Jordy Van De Keere	0				
+Schrijver	Noah Van Acker
+W49	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Wesley Ghislain	2				
+Maarten De Keulenaer	1				
+Schrijver	Lode De Moor
+W50	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Noah Crombeen	3				
+Tim De Neve	0				
+Schrijver	Jhonny Verdonck
+W51	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Yves Bertini	2			107	
+David Van de Mergel	1				
+Schrijver	Kristof Baele
+W52	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Leander Caron	0				
+Wim Van De Keere	3				
+Schrijver	Yves Van Haezevelde
+W53	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Daniël De Winter	3				
+Martijn Van Caneghem	0				
+Schrijver	Maarten De Keulenaer
+W54	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Bart Neckebroeck	0				
+Peter Eeckhout	3				
+Schrijver	Tim De Neve
+W55	RONDE 5	3 legs 501	Uitslag	180	171	HF	MP
+Blok 3	Patrick Monie	0				
+Maaren Van Haezevelde	3				
+Schrijver	David Van de Mergel
+W56	RONDE 6	3 legs 501	Uitslag	180	171	HF	MP
+Blok 4	Noah Van Acker	2				
+Lode De Moor	1				
+Schrijver	Wim Van De Keere
+W57	RONDE 6	3 legs 501	Uitslag	180	171	HF	MP
+Blok 1	Jhonny Verdonck	3				
+Kristof Baele	0				
+Schrijver	Martijn Van Caneghem
+W58	RONDE 6	3 legs 501	Uitslag	180	171	HF	MP
+Blok 2	Yves Van Haezevelde	2				
+Wesley Ghislain (stroman)	1				
+Schrijver	Bart Neckebroeck
