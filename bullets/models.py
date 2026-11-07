@@ -68,6 +68,7 @@ class Attendance(models.Model):
 
 class Match(models.Model):
     evening = models.ForeignKey(Evening, on_delete=models.CASCADE, related_name="matches")
+    is_relevant = models.BooleanField("telt mee", default=True)
     number = models.PositiveSmallIntegerField("wedstrijdnummer")
     round_number = models.PositiveSmallIntegerField("speelronde")
     board = models.PositiveSmallIntegerField("dartsblok")
@@ -133,6 +134,8 @@ class Match(models.Model):
 
     @property
     def is_complete(self):
+        if not self.is_relevant:
+            return False
         stats = list(self.stats.all())
         expected = 1 if self.is_phantom_match else 2
         return len(stats) == expected and all(stat.legs_won is not None for stat in stats)
@@ -201,6 +204,8 @@ class MatchPlayerStats(models.Model):
 
     @property
     def points(self):
+        if not self.match.is_relevant:
+            return 0
         leg_points = (
             0
             if self.is_stroman or self.match.is_phantom_match

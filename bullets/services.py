@@ -147,6 +147,8 @@ def build_standings(players, matches, attendance=None):
             rows[record.player_id]["draw_order"] = record.draw_order
 
     for match in matches:
+        if not match.is_relevant:
+            continue
         if match.referee_id in rows:
             rows[match.referee_id]["refereed"] += 1
         if not match.is_complete:

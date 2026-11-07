@@ -18,9 +18,11 @@ from django.utils import timezone
 from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
 from .schedule import (
+    _pairings,
     _improve_rest_distribution,
     _solve_rest_limits,
     _schedule_respects_board_rules,
+    _schedule_respects_unique_opponents,
     ScheduleError,
     cp_model,
     expected_match_count,
@@ -84,6 +86,44 @@ class DatabaseSnapshotTests(SimpleTestCase):
 
 
 class ScheduleTests(SimpleTestCase):
+    def test_pairings_never_repeat_opponents_when_enough_players_are_available(self):
+        for player_count in range(4, 129):
+            for match_count in range(1, min(20, player_count - 1) + 1):
+                for seed in (0, 1, 43):
+                    with self.subTest(players=player_count, matches=match_count, seed=seed):
+                        pairs = _pairings(player_count, match_count, seed=seed)
+                        regular_pairs = [
+                            tuple(sorted(pair)) for pair in pairs if "stroman" not in pair
+                        ]
+                        self.assertEqual(len(regular_pairs), len(set(regular_pairs)))
+                        self.assertEqual(len(pairs), expected_match_count(player_count, match_count))
+                        appearances = Counter(
+                            player for pair in pairs for player in pair
+                            if isinstance(player, int)
+                        )
+                        self.assertEqual(dict(appearances), dict.fromkeys(range(player_count), match_count))
+
+    def test_duplicate_opponent_guard_includes_reversed_and_stroman_matches(self):
+        matches = [
+            {"player1": 0, "player2": 1},
+            {"player1": 1, "player2": 0, "stroman_player": 0},
+        ]
+        self.assertFalse(_schedule_respects_unique_opponents(matches, 25, 5))
+        self.assertFalse(_schedule_respects_unique_opponents(matches, 6, 5))
+        self.assertTrue(_schedule_respects_unique_opponents(matches, 5, 5))
+        self.assertFalse(_schedule_respects_unique_opponents([{"player1": 0, "player2": 0}], 5, 5))
+
+    def test_25_player_evening_has_only_unique_matches_including_stroman(self):
+        matches = generate_schedule(25, 5, 5)
+        pairs = [tuple(sorted((match["player1"], match["player2"]))) for match in matches]
+        self.assertEqual(len(matches), 63)
+        self.assertEqual(len(pairs), len(set(pairs)))
+        appearances = Counter(
+            player for match in matches for player in (match["player1"], match["player2"])
+            if player != match.get("stroman_player")
+        )
+        self.assertEqual(dict(appearances), dict.fromkeys(range(25), 5))
+
     def test_strict_board_rules_reject_empty_rounds_wrong_referees_and_unbalanced_duties(self):
         matches = [
             {"round": 1, "board": 1, "player1": 0, "player2": 1, "referee": 3},
@@ -271,6 +311,8 @@ class ScheduleTests(SimpleTestCase):
                         max(match["round"] for match in original),
                     )
                     self.assertEqual(len(matches), expected_match_count(player_count, 5))
+                    pairs = [tuple(sorted((match["player1"], match["player2"]))) for match in matches]
+                    self.assertEqual(len(pairs), len(set(pairs)))
                     if player_count % 2:
                         final_opponents = {matches[-1]["player1"], matches[-1]["player2"]}
                         self.assertFalse(any(
@@ -768,6 +810,27 @@ class SeasonStandingsHistoryTests(TestCase):
         MatchPlayerStats.objects.create(match=match, player=player1, legs_won=legs1)
         MatchPlayerStats.objects.create(match=match, player=player2, legs_won=legs2)
         return match
+
+    def test_irrelevant_match_is_preserved_but_excluded_from_all_totals(self):
+        match = self.first.matches.first()
+        match.is_relevant = False
+        match.save(update_fields=["is_relevant"])
+        match.stats.update(scores_180=1, scores_171=1, high_finishes="170", least_darts="9")
+        self.assertFalse(match.is_complete)
+        self.assertTrue(all(stat.points == 0 for stat in match.stats.all()))
+        rows = {row["player"].pk: row for row in season_standings(self.season)}
+        for player in (self.players[0], self.players[3]):
+            row = rows[player.pk]
+            for key in ("points", "matches_played", "legs_for", "legs_against", "wins", "losses", "scores_180", "scores_171", "high_finishes"):
+                self.assertEqual(row[key], 0)
+            self.assertIsNone(row["least_darts"])
+            self.assertIsNone(row["highest_finish"])
+        evening_response = self.client.get(reverse("evening_detail", args=[self.first.pk]))
+        self.assertNotIn(match.pk, [item.pk for item in evening_response.context["matches"]])
+        player_response = self.client.get(reverse("player_detail", args=[self.players[0].pk]))
+        self.assertNotIn(match.pk, [item["match"].pk for item in player_response.context["matches"]])
+        self.assertEqual(player_response.context["refereed_count"], 2)
+        self.assertTrue(Match.objects.filter(pk=match.pk).exists())
 
     def test_latest_standings_include_absent_players_and_position_changes(self):
         with self.assertNumQueries(4):

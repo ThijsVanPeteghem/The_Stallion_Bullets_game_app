@@ -75,6 +75,23 @@ def _pairings(player_count, match_count=5, unmatched_player=0, seed=None):
         factors[(start + round_index) % round_count]
         for round_index in range(match_count)
     ]
+    if has_bye and match_count < player_count:
+        factors_by_bye = {bye: (games, bye) for games, bye in factors}
+        omitted_games, _ = next(
+            factor for factor in factors
+            if match_count % 2 == 0 or factor[1] != unmatched_player
+        )
+        bridge_games = [
+            game for game in omitted_games
+            if match_count % 2 == 0 or unmatched_player not in game
+        ]
+        selected_factors = [
+            factors_by_bye[player]
+            for game in bridge_games[:match_count // 2]
+            for player in game
+        ]
+        if match_count % 2:
+            selected_factors.append(factors_by_bye[unmatched_player])
     pairs = []
     for pair_start in range(0, match_count, 2):
         first_round = pair_start + 1
@@ -1059,6 +1076,17 @@ def _improve_rest_distribution(matches, player_count):
     return result
 
 
+def _schedule_respects_unique_opponents(matches, player_count, match_count):
+    pairs = [
+        tuple(sorted((match["player1"], match["player2"])))
+        for match in matches
+        if isinstance(match["player2"], int)
+    ]
+    if any(left == right for left, right in pairs):
+        return False
+    return match_count >= player_count or len(pairs) == len(set(pairs))
+
+
 def generate_schedule(player_count, board_count, match_count=5, stroman_player=None):
     if not 4 <= player_count <= 128:
         raise ScheduleError("Een competitieavond moet 4 tot en met 128 spelers hebben.")
@@ -1174,6 +1202,9 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
             stroman_match["player_rounds"][selected_stroman] = (
                 stroman_match["player_rounds"].pop("stroman")
             )
+
+        if not _schedule_respects_unique_opponents(schedule, player_count, match_count):
+            continue
 
         appearances = Counter(
             player
@@ -1330,4 +1361,7 @@ def generate_schedule(player_count, board_count, match_count=5, stroman_player=N
                 "Kies een andere speler."
             )
         raise ScheduleError("Er kon geen geldig schema met een evenwichtige scheidsrechterverdeling worden gemaakt.")
-    return _improve_rest_distribution(best_schedule, player_count)
+    result = _improve_rest_distribution(best_schedule, player_count)
+    if not _schedule_respects_unique_opponents(result, player_count, match_count):
+        raise ScheduleError("Het schema bevat een dubbele ontmoeting terwijl er voldoende tegenstanders zijn.")
+    return result

@@ -73,7 +73,7 @@ def players(request):
 def player_detail(request, player_id):
     player = get_object_or_404(Player, pk=player_id)
     matches = list(
-        Match.objects.filter(Q(player1=player) | Q(player2=player))
+        Match.objects.filter(Q(player1=player) | Q(player2=player), is_relevant=True)
         .select_related("evening", "evening__season", "player1", "player2", "referee")
         .prefetch_related("stats")
         .order_by("-evening__date", "-number")
@@ -135,7 +135,7 @@ def player_detail(request, player_id):
                 key=lambda item: (-item[1], item[0].name.casefold()),
             ),
             "played_count": played_count,
-            "refereed_count": Match.objects.filter(referee=player).count(),
+            "refereed_count": Match.objects.filter(referee=player, is_relevant=True).count(),
             "totals": totals,
             "high_finish_values": high_finish_values,
             "least_darts_values": least_darts_values,
@@ -184,7 +184,7 @@ def delete_season(request, season_id):
         {
             "season": season,
             "evening_count": season.evenings.count(),
-            "match_count": Match.objects.filter(evening__season=season).count(),
+            "match_count": Match.objects.filter(evening__season=season, is_relevant=True).count(),
         },
     )
 
@@ -220,7 +220,7 @@ def _evening_context(evening):
     )
     players = [attendance.player for attendance in attendances]
     matches = list(
-        evening.matches.select_related("player1", "player2", "referee")
+        evening.matches.filter(is_relevant=True).select_related("player1", "player2", "referee")
         .prefetch_related("stats")
         .order_by("number")
     )
@@ -503,7 +503,7 @@ def evening_standings_view(request, evening_id):
 
 def evening_standings_live_state(request, evening_id):
     evening = get_object_or_404(Evening, pk=evening_id)
-    complete_count = Match.objects.filter(evening=evening).filter(
+    complete_count = Match.objects.filter(evening=evening, is_relevant=True).filter(
         stats__legs_won__isnull=False
     ).distinct().count()
     return JsonResponse(
@@ -547,6 +547,7 @@ def edit_match(request, match_id):
         Match.objects.select_related("evening", "evening__season", "player1", "player2", "referee")
         .prefetch_related("stats"),
         pk=match_id,
+        is_relevant=True,
     )
     form = MatchResultForm(request.POST or None, match=match)
     if request.method == "POST" and form.is_valid():
@@ -580,7 +581,7 @@ def edit_match(request, match_id):
 def print_evening(request, evening_id):
     evening = get_object_or_404(Evening.objects.select_related("season"), pk=evening_id)
     matches = list(
-        evening.matches.select_related("player1", "player2", "referee").order_by("number")
+        evening.matches.filter(is_relevant=True).select_related("player1", "player2", "referee").order_by("number")
         .prefetch_related("stats")
     )
     print_matches = []
