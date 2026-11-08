@@ -17,13 +17,10 @@ Runs the complete Django test suite on every push and pull request.
 - Runs: `python manage.py test bullets --verbosity=2`
 
 **Test Coverage:**
-- 66 total tests across multiple test classes:
-  - CompetitionFlowTests (34 tests)
-  - LegacyImportTests (9 tests)
-  - SeasonStandingsHistoryTests (7 tests)
-  - AboutPageTests (1 test)
-  - DatabaseSnapshotTests (2 tests)
-  - ScheduleTests (13 tests)
+- All tests in `bullets` are discovered automatically, including newly added tests.
+- `ScheduleTests` covers unique opponents, reversed/stroman encounters, and the exception when there are too few players.
+- `CompetitionFlowTests` covers the per-player duplicate-opponent audit and its total immediately after creating an evening, before any results are entered.
+- Also includes legacy imports, season standings, application pages, and database snapshots.
 
 ### 2. Code Quality (`lint.yml`)
 Runs flake8 linting checks to maintain code standards.
