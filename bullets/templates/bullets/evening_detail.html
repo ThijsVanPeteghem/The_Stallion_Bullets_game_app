@@ -13,14 +13,22 @@
 </div>
 {% include "bullets/evening_tabs.html" with active_tab="matches" %}
 <section class="panel">
-  <h2>Wedstrijdschema</h2>
+  <div class="section-heading">
+    <h2>Wedstrijdschema</h2>
+    <form method="post" action="{% url 'clear_evening_called' evening.id %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ evening_detail_path }}">
+      <button class="button button-secondary" type="submit">Afgeroepen deselecteren</button>
+    </form>
+  </div>
+  <p class="muted">Markeer een wedstrijd als afgeroepen. Rijen kleuren lichtoranje wanneer afgeroepen en lichtgroen zodra de uitslag is ingevuld.</p>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th><abbr title="Spelersronde">SR</abbr></th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th></th><th class="copy-only" style="display:none">Worpen, finishes en pijlen</th></tr></thead>
+    <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th><abbr title="Spelersronde">SR</abbr></th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th>Afg.</th><th></th><th class="copy-only" style="display:none">Worpen, finishes en pijlen</th></tr></thead>
     <tbody>
     {% for match in matches %}
-      <tr>
-        <td>{{ match.number }}</td><td>{{ match.round_number }}</td><td>{{ match.board }}</td>
+      <tr id="match-{{ match.id }}" class="match-row{% if match.is_complete %} match-row-complete{% elif match.is_called %} match-row-called{% endif %}">
+        <td><span id="match-anchor-{{ match.id }}" class="match-anchor" aria-hidden="true"></span>{{ match.number }}</td><td>{{ match.round_number }}</td><td>{{ match.board }}</td>
         <td>{{ match.player1_player_round|default_if_none:"—" }} / {{ match.player2_player_round|default_if_none:"—" }}</td>
         <td><a href="{% url 'player_detail' match.player1_id %}">{{ match.player1 }}</a>{% if match.stroman_player_id == match.player1_id %} <span class="badge">Speelt stroman</span>{% endif %} <span class="muted">vs</span> {% if match.player2 %}<a href="{% url 'player_detail' match.player2_id %}">{{ match.player2 }}</a>{% if match.stroman_player_id == match.player2_id %} <span class="badge">Speelt stroman</span>{% endif %}{% else %}<span class="muted">Stroman (virtuele tegenstander)</span>{% endif %}</td>
         <td>
@@ -29,7 +37,20 @@
           {% else %}<span class="muted">Nog niet gespeeld</span>{% endif %}
         </td>
         <td>{% if match.referee %}<a href="{% url 'player_detail' match.referee_id %}">{{ match.referee }}</a>{% else %}—{% endif %}</td>
-        <td><a href="{% url 'edit_match' match.id %}">{% if match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a></td>
+        <td>
+          <form method="post" action="{% url 'toggle_match_called' match.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ evening_detail_path }}#match-anchor-{{ match.id }}">
+            <input
+              type="checkbox"
+              name="is_called"
+              aria-label="Wedstrijd {{ match.number }} afgeroepen"
+              {% if match.is_called %}checked{% endif %}
+              onchange="this.form.submit()"
+            >
+          </form>
+        </td>
+        <td><a href="{% url 'edit_match' match.id %}?return_to={{ evening_detail_path }}%23match-anchor-{{ match.id }}">{% if match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a></td>
         <td class="copy-only" style="display:none">{% for stat in match.stats.all %}{{ stat.player.name }}{% if stat.is_stroman %} (Stroman){% endif %}: 171 {{ stat.scores_171 }}, 180 {{ stat.scores_180 }}, HF {{ stat.high_finishes|default:"—" }}, MP {{ stat.least_darts|default:"—" }}{% if not forloop.last %}; {% endif %}{% endfor %}</td>
       </tr>
     {% endfor %}
@@ -59,7 +80,9 @@
   <p>
     Volle blokken: {% if schedule_audit.blocks_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %} ·
     Scheidsrechterrotatie: {% if schedule_audit.referees_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %} ·
-    Scheidsrechterverdeling: {% if schedule_audit.referee_distribution_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %}
+    Scheidsrechterverdeling: {% if schedule_audit.referee_distribution_valid %}<span class="badge">OK</span>{% else %}<span class="error">Afwijking</span>{% endif %} ·
+    <span title="Som van de dubbele ontmoetingen per speler, inclusief stromannen. Iedere ontmoeting na de eerste met dezelfde tegenstander telt bij beide spelers.">Dubbele ontmoetingen = {{ schedule_audit.duplicate_opponents }}</span>
+    {% if not schedule_audit.duplicate_opponents_valid %}<span class="error">Afwijking</span>{% elif schedule_audit.duplicate_opponents and schedule_audit.duplicate_opponents_allowed %}<span class="badge">Toegestaan: te weinig spelers</span>{% else %}<span class="badge">OK</span>{% endif %}
   </p>
   <p>
     Totaal wedstrijden: {{ schedule_audit.actual_matches }}/{{ schedule_audit.expected_matches }} ·
@@ -68,8 +91,8 @@
     {% if schedule_audit.valid %}<span class="badge">OK</span>{% else %}<span class="error">Controle mislukt</span>{% endif %}
   </p>
   <div class="table-wrap"><table class="schedule-audit-table">
-    <colgroup><col style="width:5%"><col style="width:22%"><col style="width:9%"><col style="width:23%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:11%"></colgroup>
-    <thead><tr><th title="Lotingsnummer">Nr.</th><th>Speler</th><th title="Aantal ingeplande reguliere wedstrijden, zonder de extra stromanwedstrijd.">Matchen</th><th title="Blokrondes waarin deze speler speelt, inclusief de extra stromanwedstrijd."><abbr title="Blokrondes">BR</abbr></th><th title="Max. rust op rij: langste reeks blokrondes zonder wedstrijd, inclusief begin en einde van de avond. Scheidsrechterbeurten tellen als niet spelen.">Rust</th><th title="Max. wedstrijden op rij: langste reeks opeenvolgende blokrondes met een wedstrijd, inclusief de extra stromanwedstrijd.">Reeks</th><th title="Aantal extra wedstrijden als stroman."><abbr title="Stromanwedstrijden">Str.</abbr></th><th title="Aantal ingeplande scheidsrechterbeurten."><abbr title="Scheidsrechterbeurten">Sch.</abbr></th><th title="Controle van het aantal reguliere wedstrijden, stromanwedstrijden en spelersrondes.">Status</th></tr></thead>
+    <colgroup><col style="width:5%"><col style="width:20%"><col style="width:8%"><col style="width:21%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:6%"><col style="width:7%"><col style="width:13%"></colgroup>
+    <thead><tr><th title="Lotingsnummer">Nr.</th><th>Speler</th><th title="Aantal ingeplande reguliere wedstrijden, zonder de extra stromanwedstrijd.">Matchen</th><th title="Blokrondes waarin deze speler speelt, inclusief de extra stromanwedstrijd."><abbr title="Blokrondes">BR</abbr></th><th title="Max. rust op rij: langste reeks blokrondes zonder wedstrijd, inclusief begin en einde van de avond. Scheidsrechterbeurten tellen als niet spelen.">Rust</th><th title="Max. wedstrijden op rij: langste reeks opeenvolgende blokrondes met een wedstrijd, inclusief de extra stromanwedstrijd.">Reeks</th><th title="Aantal extra wedstrijden als stroman."><abbr title="Stromanwedstrijden">Str.</abbr></th><th title="Aantal ingeplande scheidsrechterbeurten."><abbr title="Scheidsrechterbeurten">Sch.</abbr></th><th title="Iedere ontmoeting na de eerste met dezelfde tegenstander, inclusief stromanwedstrijden. Alleen toegestaan als er te weinig spelers zijn voor unieke tegenstanders."><abbr title="Dubbele ontmoetingen">Dub.</abbr></th><th title="Controle van het aantal reguliere wedstrijden, stromanwedstrijden, spelersrondes en dubbele ontmoetingen.">Status</th></tr></thead>
     <tbody>{% for row in match_audit %}
       <tr>
         <td>{{ row.attendance.draw_order }}</td>
@@ -80,7 +103,8 @@
         <td>{{ row.max_consecutive_matches }}</td>
         <td>{{ row.stroman_matches }}</td>
         <td>{{ row.referees }}</td>
-        <td>{% if row.matches == row.expected_matches and row.stroman_matches <= 1 and row.player_rounds_valid %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>
+        <td{% if not row.duplicate_opponents_valid %} class="error"{% endif %}>{{ row.duplicate_opponents }}</td>
+        <td>{% if not row.duplicate_opponents_valid %}<span class="error">Dubbele ontmoetingen</span>{% elif row.matches == row.expected_matches and row.stroman_matches <= 1 and row.player_rounds_valid %}<span class="badge">OK</span>{% else %}<span class="error">Verwacht {{ row.expected_matches }}</span>{% endif %}</td>
       </tr>
     {% endfor %}</tbody>
   </table></div>

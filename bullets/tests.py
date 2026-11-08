@@ -1994,6 +1994,84 @@ class CompetitionFlowTests(TestCase):
         self.assertEqual(stat.least_darts, "13, 15")
         self.assertEqual(first_row["least_darts"], 13)
 
+    def test_edit_match_redirects_back_to_anchor_when_return_to_is_provided(self):
+        match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
+        return_to = f"{reverse('evening_detail', args=[self.evening.id])}#match-anchor-{match.id}"
+        response = self.client.post(
+            reverse("edit_match", args=[match.id]),
+            {
+                "return_to": return_to,
+                "p1_legs": "2",
+                "p1_high_finishes": "",
+                "p1_180": "0",
+                "p1_171": "0",
+                "p1_least_darts": "",
+                "p2_legs": "1",
+                "p2_high_finishes": "",
+                "p2_180": "0",
+                "p2_171": "0",
+                "p2_least_darts": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], return_to)
+
+    def test_called_checkbox_marks_row_and_completed_match_turns_green(self):
+        match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
+        return_to = f"{reverse('evening_detail', args=[self.evening.id])}#match-anchor-{match.id}"
+        toggle_response = self.client.post(
+            reverse("toggle_match_called", args=[match.id]),
+            {"is_called": "on", "next": return_to},
+        )
+        self.assertEqual(toggle_response.status_code, 302)
+        self.assertEqual(toggle_response["Location"], return_to)
+        match.refresh_from_db()
+        self.assertTrue(match.is_called)
+
+        evening_response = self.client.get(reverse("evening_detail", args=[self.evening.id]))
+        self.assertContains(
+            evening_response,
+            f'id="match-{match.id}" class="match-row match-row-called"',
+        )
+
+        self.client.post(
+            reverse("edit_match", args=[match.id]),
+            {
+                "p1_legs": "2",
+                "p1_high_finishes": "",
+                "p1_180": "0",
+                "p1_171": "0",
+                "p1_least_darts": "",
+                "p2_legs": "1",
+                "p2_high_finishes": "",
+                "p2_180": "0",
+                "p2_171": "0",
+                "p2_least_darts": "",
+            },
+        )
+        evening_response = self.client.get(reverse("evening_detail", args=[self.evening.id]))
+        self.assertContains(
+            evening_response,
+            f'id="match-{match.id}" class="match-row match-row-complete"',
+        )
+
+    def test_clear_evening_called_unchecks_all_called_matches(self):
+        matches = list(Match.objects.filter(evening=self.evening, is_relevant=True)[:2])
+        for match in matches:
+            match.is_called = True
+            match.save(update_fields=["is_called"])
+
+        response = self.client.post(
+            reverse("clear_evening_called", args=[self.evening.id]),
+            {"next": reverse("evening_detail", args=[self.evening.id])},
+        )
+
+        self.assertRedirects(response, reverse("evening_detail", args=[self.evening.id]))
+        for match in matches:
+            match.refresh_from_db()
+            self.assertFalse(match.is_called)
+
     def test_least_darts_accepts_multiple_valid_legs_and_rejects_invalid_values(self):
         match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
         result = {

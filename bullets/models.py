@@ -69,6 +69,7 @@ class Attendance(models.Model):
 class Match(models.Model):
     evening = models.ForeignKey(Evening, on_delete=models.CASCADE, related_name="matches")
     is_relevant = models.BooleanField("telt mee", default=True)
+    is_called = models.BooleanField("afgeroepen", default=False)
     number = models.PositiveSmallIntegerField("wedstrijdnummer")
     round_number = models.PositiveSmallIntegerField("speelronde")
     board = models.PositiveSmallIntegerField("dartsblok")

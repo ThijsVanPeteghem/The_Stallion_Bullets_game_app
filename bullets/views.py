@@ -7,6 +7,9 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from .forms import EveningForm, MatchResultForm, PlayerEditForm, PlayerForm, SeasonForm
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
@@ -20,6 +23,29 @@ from .services import (
     sort_standings_for_ranking,
 )
 from .schedule import ScheduleError, StromanSelectionError, expected_match_count
+
+
+def _safe_relative_url(request, candidate):
+    if not candidate:
+        return None
+    if not candidate.startswith("/"):
+        return None
+    if not url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return None
+    return candidate
+
+
+def _match_return_url(request, match):
+    fallback = reverse("evening_detail", args=[match.evening_id])
+    return (
+        _safe_relative_url(request, request.POST.get("return_to"))
+        or _safe_relative_url(request, request.GET.get("return_to"))
+        or fallback
+    )
 
 
 def _evening_live_token(evening):
@@ -310,6 +336,22 @@ def _evening_context(evening):
         for stat in match.stats.all()
         if stat.is_stroman
     )
+    opponent_pairs = Counter(
+        tuple(sorted((match.player1_id, match.player2_id)))
+        for match in matches
+        if match.player2_id is not None
+    )
+    duplicate_opponents = Counter()
+    for pair, count in opponent_pairs.items():
+        for player_id in pair:
+            duplicate_opponents[player_id] += count - 1
+    duplicate_opponents_total = sum(
+        duplicate_opponents[player.id] for player in players
+    )
+    duplicate_opponents_allowed = evening.match_count >= len(players)
+    duplicate_opponents_valid = (
+        duplicate_opponents_total == 0 or duplicate_opponents_allowed
+    )
     max_points = max((row["points"] for row in standings), default=0)
     for row in standings:
         scheduled_count = (
@@ -423,6 +465,9 @@ def _evening_context(evening):
             "blocks_valid": blocks_valid,
             "referees_valid": referees_valid,
             "referee_distribution_valid": referee_distribution_valid,
+            "duplicate_opponents": duplicate_opponents_total,
+            "duplicate_opponents_allowed": duplicate_opponents_allowed,
+            "duplicate_opponents_valid": duplicate_opponents_valid,
             "valid": (
                 len(matches) == expected_total_matches
                 and stroman_match_total == expected_stroman_matches
@@ -440,6 +485,7 @@ def _evening_context(evening):
                 and blocks_valid
                 and referees_valid
                 and referee_distribution_valid
+                and duplicate_opponents_valid
             ),
         },
         "match_audit": [
@@ -451,6 +497,11 @@ def _evening_context(evening):
                 ),
                 "stroman_matches": stroman_match_counts[attendance.player_id],
                 "referees": referee_counts[attendance.player_id],
+                "duplicate_opponents": duplicate_opponents[attendance.player_id],
+                "duplicate_opponents_valid": (
+                    duplicate_opponents[attendance.player_id] == 0
+                    or duplicate_opponents_allowed
+                ),
                 "max_consecutive_rest": max_consecutive_rest[attendance.player_id],
                 "max_consecutive_matches": max_consecutive_matches[attendance.player_id],
                 "expected_matches": evening.match_count,
@@ -491,6 +542,7 @@ def evening_detail(request, evening_id):
     evening = get_object_or_404(Evening.objects.select_related("season"), pk=evening_id)
     context = _evening_context(evening)
     context["can_regenerate_schedule"] = not evening_has_results(evening)
+    context["evening_detail_path"] = reverse("evening_detail", args=[evening.id])
     return render(request, "bullets/evening_detail.html", context)
 
 
@@ -550,6 +602,7 @@ def edit_match(request, match_id):
         is_relevant=True,
     )
     form = MatchResultForm(request.POST or None, match=match)
+    return_to = _match_return_url(request, match)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             prefixes = [("p1", match.player1)]
@@ -563,7 +616,7 @@ def edit_match(request, match_id):
                 stat.scores_171 = form.cleaned_data[f"{prefix}_171"]
                 stat.least_darts = form.cleaned_data[f"{prefix}_least_darts"]
                 stat.save()
-        return redirect("evening_detail", evening_id=match.evening_id)
+        return redirect(return_to)
     return render(
         request,
         "bullets/match_edit.html",
@@ -571,11 +624,36 @@ def edit_match(request, match_id):
             "match": match,
             "form": form,
             "evening": match.evening,
+            "return_to": return_to,
             "stroman_player_ids": {
                 stat.player_id for stat in match.stats.all() if stat.is_stroman
             },
         },
     )
+
+
+@require_POST
+def toggle_match_called(request, match_id):
+    match = get_object_or_404(Match, pk=match_id, is_relevant=True)
+    match.is_called = request.POST.get("is_called") == "on"
+    match.save(update_fields=["is_called"])
+    next_url = (
+        _safe_relative_url(request, request.POST.get("next"))
+        or f"{reverse('evening_detail', args=[match.evening_id])}#match-anchor-{match.id}"
+    )
+    return redirect(next_url)
+
+
+@require_POST
+def clear_evening_called(request, evening_id):
+    evening = get_object_or_404(Evening, pk=evening_id)
+    Match.objects.filter(evening=evening, is_relevant=True, is_called=True).update(
+        is_called=False
+    )
+    next_url = _safe_relative_url(request, request.POST.get("next")) or reverse(
+        "evening_detail", args=[evening.id]
+    )
+    return redirect(next_url)
 
 
 def print_evening(request, evening_id):

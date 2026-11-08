@@ -90,6 +90,12 @@ button { margin-top: 14px; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th, td { padding: 10px 9px; border-bottom: 1px solid var(--line); text-align: left; }
 th { background: #f5ebe8; color: var(--club-red-dark); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.match-row-called { background: #ffd9ad; }
+.match-row-complete { background: #eaf8ee; }
+.match-row-called:hover, .match-row-complete:hover { filter: brightness(0.99); }
+.match-anchor { display: block; position: relative; top: -230px; height: 0; visibility: hidden; }
+.match-row td form { margin: 0; }
+.match-row td input[type="checkbox"] { width: auto; margin: 0; }
 .table-sort-button { display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
 .table-sort-button:hover { color: var(--club-red); }
 .table-sort-button:focus-visible { outline: 2px solid var(--club-red); outline-offset: 2px; }
@@ -105,9 +111,9 @@ tbody tr:hover { background: #fdf9f8; }
 .result-entry-table td .error { display: block; max-width: 140px; font-size: 11px; white-space: normal; }
 .result-entry-help { margin: 8px 0 18px; font-size: 13px; }
 .player-name { font-weight: 650; }
-.schedule-audit-table { min-width: 760px; table-layout: fixed; white-space: normal; font-size: 14px; }
+.schedule-audit-table { min-width: 840px; table-layout: fixed; white-space: normal; font-size: 14px; }
 .schedule-audit-table th, .schedule-audit-table td { padding: 8px 6px; overflow-wrap: anywhere; }
-.schedule-audit-table abbr { cursor: help; }
+.schedule-audit-table abbr { cursor: help; white-space: nowrap; }
 .player-stat-table { max-width: 600px; }
 .player-stat-table td:nth-child(2) { width: 120px; font-weight: 700; }
 .standing-progress { display: block; width: 90px; height: 9px; margin-top: 4px; accent-color: var(--club-red); }

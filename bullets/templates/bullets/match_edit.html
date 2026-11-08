@@ -1,7 +1,7 @@
 {% extends "bullets/base.html" %}
 {% block title %}Wedstrijd {{ match.number }} | The Stallion Bullets{% endblock %}
 {% block content %}
-<p class="eyebrow"><a href="{% url 'evening_detail' evening.id %}">{{ evening.date|date:"d/m/Y" }}</a> · Blok {{ match.board }} · Ronde {{ match.round_number }}</p>
+<p class="eyebrow"><a href="{{ return_to }}">{{ evening.date|date:"d/m/Y" }}</a> · Blok {{ match.board }} · Ronde {{ match.round_number }}</p>
 <h1>Wedstrijd {{ match.number }}</h1>
 <section class="panel">
   <div class="section-heading">
@@ -10,6 +10,7 @@
   </div>
   {% if form.non_field_errors %}<div class="error">{{ form.non_field_errors }}</div>{% endif %}
   <form method="post">{% csrf_token %}
+    <input type="hidden" name="return_to" value="{{ return_to }}">
     <div class="table-wrap result-table-wrap">
       <table class="result-entry-table">
         <thead>
@@ -40,7 +41,7 @@
       </table>
     </div>
     <p class="result-entry-help muted">Vul finishwaarden vanaf 2 en pijlen per leg in, telkens gescheiden door komma’s. Alleen finishes vanaf 100 tellen mee voor punten. Bijvoorbeeld: HF 74, 120 · MP 13, 16. De stroman krijgt geen punten voor gewonnen legs en deze extra partij telt niet mee als gespeelde wedstrijd voor die speler.</p>
-    <div class="actions"><button class="button" type="submit">Uitslag opslaan</button><a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Annuleren</a></div>
+    <div class="actions"><button class="button" type="submit">Uitslag opslaan</button><a class="button button-secondary" href="{{ return_to }}">Annuleren</a></div>
   </form>
 </section>
 {% endblock %}

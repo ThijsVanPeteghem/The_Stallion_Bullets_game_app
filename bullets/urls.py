@@ -25,5 +25,7 @@ urlpatterns = [
     path("avonden/<int:evening_id>/schema-opnieuw/", views.regenerate_schedule_view, name="regenerate_schedule"),
     path("avonden/<int:evening_id>/verwijderen/", views.delete_evening, name="delete_evening"),
     path("avonden/<int:evening_id>/print/", views.print_evening, name="print_evening"),
+    path("avonden/<int:evening_id>/afgeroepen/wissen/", views.clear_evening_called, name="clear_evening_called"),
     path("wedstrijden/<int:match_id>/bewerken/", views.edit_match, name="edit_match"),
+    path("wedstrijden/<int:match_id>/afgeroepen/", views.toggle_match_called, name="toggle_match_called"),
 ]
