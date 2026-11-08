@@ -162,8 +162,8 @@ def build_standings(players, matches, attendance=None):
             if not match.is_phantom_match and not stat.is_stroman:
                 row["matches_played"] += 1
                 row["legs_for"] += stat.legs_won or 0
-            row["high_finishes"] += len(stat.finish_values())
-            finish_values = stat.finish_values()
+            finish_values = [value for value in stat.finish_values() if value >= 100]
+            row["high_finishes"] += len(finish_values)
             if finish_values:
                 row["highest_finish"] = max(
                     filter(None, [row["highest_finish"], max(finish_values)])
