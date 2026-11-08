@@ -187,16 +187,7 @@ def seasons(request):
 
 
 def season_detail(request, season_id):
-    season = get_object_or_404(Season, pk=season_id)
-    return render(
-        request,
-        "bullets/season_detail.html",
-        {
-            "season": season,
-            "evenings": season.evenings.all(),
-            "standings": season_standings(season),
-        },
-    )
+    return season_standings_view(request, season_id)
 
 
 def delete_season(request, season_id):

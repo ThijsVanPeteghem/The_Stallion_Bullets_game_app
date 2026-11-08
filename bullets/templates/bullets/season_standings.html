@@ -1,8 +1,18 @@
 {% extends "bullets/base.html" %}
 {% block title %}Seizoenstand {{ season.name }} | The Stallion Bullets{% endblock %}
 {% block content %}
-<p class="eyebrow"><a href="{% url 'season_detail' season.id %}">{{ season.name }}</a></p>
-<h1>Seizoenklassement</h1>
+<div class="section-heading">
+  <div><p class="eyebrow">SEIZOEN</p><h1>{{ season.name }}</h1></div>
+  <div class="actions">
+    <a class="button" href="{% url 'new_evening' %}">Avond toevoegen</a>
+    <a class="button button-danger" href="{% url 'delete_season' season.id %}">Competitie verwijderen</a>
+  </div>
+</div>
+<section class="panel">
+  <h2>Competitieavonden</h2>
+  <ul class="link-list">{% for evening in evenings %}<li><a href="{% url 'evening_detail' evening.id %}">{{ evening.date|date:"d/m/Y" }}</a><span>{{ evening.matches.count }} wedstrijden</span></li>{% empty %}<li class="muted">Er zijn nog geen avonden in dit seizoen.</li>{% endfor %}</ul>
+</section>
+<h2>Seizoenklassement</h2>
 {% if evenings %}
 <section class="panel">
   <form method="get" class="standings-filter">
