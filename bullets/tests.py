@@ -1442,6 +1442,27 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "Voor 4 blokken zijn minimaal 12 deelnemers nodig.")
         self.assertContains(response, 'name="match_count"')
         self.assertContains(response, 'value="5"')
+        self.assertContains(response, 'id="create-evening-loading"')
+        self.assertContains(response, 'id="create-evening-submit"')
+
+    def test_new_evening_rejects_duplicate_date_within_same_season(self):
+        data = {
+            "season": self.season.id,
+            "date": "01/10/2026",
+            "board_count": "4",
+            "match_count": "5",
+            "players": [str(player.id) for player in self.players[:4]],
+            "draw_order": json.dumps([player.id for player in self.players[:4]]),
+        }
+
+        response = self.client.post(reverse("new_evening"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "bestaat al een competitieavond op deze datum")
+        self.assertEqual(
+            Evening.objects.filter(season=self.season, date="2026-10-01").count(),
+            1,
+        )
 
     def test_wordpress_export_includes_matches_all_rankings_and_evening_standings(self):
         match = self.evening.matches.filter(player2__isnull=False).first()

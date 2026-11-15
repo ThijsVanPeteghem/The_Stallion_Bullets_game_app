@@ -63,11 +63,18 @@
     </div>
     {{ form.draw_order }}
     {% for error in form.draw_order.errors %}<span class="error">{{ error }}</span>{% endfor %}
-    <button class="button" type="submit">Schema maken</button>
+    <button class="button" type="submit" id="create-evening-submit">Schema maken</button>
   </form>
 </section>
+<div id="create-evening-loading" class="loading-overlay" hidden>
+  <div class="loading-popup" role="status" aria-live="polite" aria-label="Avond wordt aangemaakt">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    <p>Avond wordt aangemaakt… even geduld.</p>
+  </div>
+</div>
 <script>
 (() => {
+  const form = document.querySelector("form[method='post']");
   const checkboxes = [...document.querySelectorAll('input[name="players"]')];
   const orderInput = document.getElementById("id_draw_order");
   const orderList = document.getElementById("draw-order-list");
@@ -81,7 +88,8 @@
   const matchCountInput = document.getElementById("id_match_count");
   const stromanInput = document.getElementById("id_stroman_player");
   const autoStromanInput = document.getElementById("id_auto_stroman");
-  const stromanOptions = document.getElementById("stroman-options");
+  const submitButton = document.getElementById("create-evening-submit");
+  const loadingOverlay = document.getElementById("create-evening-loading");
   const stromanNote = document.getElementById("stroman-note");
   const names = new Map(checkboxes.map(box => [box.value, box.closest("label").textContent.trim()]));
   const selectedOrder = (() => {
@@ -171,6 +179,19 @@
   });
   matchCountInput.addEventListener("input", render);
   autoStromanInput.addEventListener("change", render);
+  let formSubmitting = false;
+  form.addEventListener("submit", (event) => {
+    if (formSubmitting) {
+      event.preventDefault();
+      return;
+    }
+    if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      return;
+    }
+    formSubmitting = true;
+    submitButton.disabled = true;
+    loadingOverlay.hidden = false;
+  });
   render();
 })();
 </script>

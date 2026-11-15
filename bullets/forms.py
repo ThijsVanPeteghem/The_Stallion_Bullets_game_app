@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 import json
 
-from .models import Player, Season
+from .models import Evening, Player, Season
 
 
 class PlayerForm(forms.ModelForm):
@@ -82,6 +82,13 @@ class EveningForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        season = cleaned_data.get("season")
+        date = cleaned_data.get("date")
+        if season and date and Evening.objects.filter(season=season, date=date).exists():
+            self.add_error(
+                "date",
+                "In dit seizoen bestaat al een competitieavond op deze datum.",
+            )
         selected_players = cleaned_data.get("players")
         if selected_players is None:
             return cleaned_data

@@ -216,6 +216,7 @@ def delete_season(request, season_id):
 
 def new_evening(request):
     form = EveningForm(request.POST or None)
+    context = {"form": form}
     if request.method == "POST" and form.is_valid():
         try:
             evening = create_evening(
@@ -228,15 +229,15 @@ def new_evening(request):
             )
         except StromanSelectionError as error:
             form.add_error("stroman_player", str(error))
-            return render(request, "bullets/new_evening.html", {"form": form})
+            return render(request, "bullets/new_evening.html", context)
         except ScheduleError as error:
             form.add_error(
                 None,
             str(error),
             )
-            return render(request, "bullets/new_evening.html", {"form": form})
+            return render(request, "bullets/new_evening.html", context)
         return redirect("evening_detail", evening_id=evening.id)
-    return render(request, "bullets/new_evening.html", {"form": form})
+    return render(request, "bullets/new_evening.html", context)
 
 
 def _evening_context(evening):
