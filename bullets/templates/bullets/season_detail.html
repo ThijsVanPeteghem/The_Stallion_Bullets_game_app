@@ -5,7 +5,6 @@
   <div><p class="eyebrow">SEIZOEN</p><h1>{{ season.name }}</h1></div>
   <div class="actions">
     <a class="button" href="{% url 'new_evening' %}">Avond toevoegen</a>
-    <a class="button button-secondary" href="{% url 'season_standings' season.id %}">Seizoenstand</a>
     <a class="button button-danger" href="{% url 'delete_season' season.id %}">Competitie verwijderen</a>
   </div>
 </div>
@@ -13,12 +12,8 @@
   <h2>Competitieavonden</h2>
   <ul class="link-list">{% for evening in evenings %}<li><a href="{% url 'evening_detail' evening.id %}">{{ evening.date|date:"d/m/Y" }}</a><span>{{ evening.matches.count }} wedstrijden</span></li>{% empty %}<li class="muted">Er zijn nog geen avonden in dit seizoen.</li>{% endfor %}</ul>
 </section>
-<section class="panel">
-  <h2>Seizoenklassement</h2>
-  <p><a href="{% url 'season_standings' season.id %}">Bekijk de evolutie per speeldag</a></p>
-  <p class="muted">Positie tegenover de vorige speeldag: + gestegen, - gedaald, = gelijk gebleven, Nieuw bij eerste klassering.</p>
-  {% include "bullets/standings_table.html" with standings=standings show_referees=True show_position_change=True %}
-</section>
+<h2>Seizoenklassement</h2>
+{% include "bullets/season_standings_content.html" %}
 <div class="season-export-footer">
   {% include "bullets/wordpress_export_button.html" with season_id=season.id %}
 </div>

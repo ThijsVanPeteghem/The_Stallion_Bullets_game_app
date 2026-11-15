@@ -4,10 +4,9 @@ import json
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -23,29 +22,6 @@ from .services import (
     sort_standings_for_ranking,
 )
 from .schedule import ScheduleError, StromanSelectionError, expected_match_count
-
-
-def _safe_relative_url(request, candidate):
-    if not candidate:
-        return None
-    if not candidate.startswith("/"):
-        return None
-    if not url_has_allowed_host_and_scheme(
-        candidate,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return None
-    return candidate
-
-
-def _match_return_url(request, match):
-    fallback = reverse("evening_detail", args=[match.evening_id])
-    return (
-        _safe_relative_url(request, request.POST.get("return_to"))
-        or _safe_relative_url(request, request.GET.get("return_to"))
-        or fallback
-    )
 
 
 def _evening_live_token(evening):
@@ -98,8 +74,30 @@ def players(request):
 
 def player_detail(request, player_id):
     player = get_object_or_404(Player, pk=player_id)
+    seasons = list(
+        Season.objects.annotate(latest_evening_created=Max("evenings__created_at"))
+        .filter(latest_evening_created__isnull=False)
+        .order_by("-latest_evening_created", "-pk")
+    )
+    latest_evening = Evening.objects.select_related("season").order_by(
+        "-created_at", "-pk"
+    ).first()
+    requested_season = request.GET.get("season")
+    if requested_season:
+        selected_season = next(
+            (season for season in seasons if str(season.pk) == requested_season),
+            None,
+        )
+        if selected_season is None:
+            raise Http404("Dit seizoen bestaat niet.")
+    else:
+        selected_season = latest_evening.season if latest_evening else None
+
+    matches_query = Match.objects.filter(Q(player1=player) | Q(player2=player))
+    if selected_season:
+        matches_query = matches_query.filter(evening__season=selected_season)
     matches = list(
-        Match.objects.filter(Q(player1=player) | Q(player2=player), is_relevant=True)
+        matches_query
         .select_related("evening", "evening__season", "player1", "player2", "referee")
         .prefetch_related("stats")
         .order_by("-evening__date", "-number")
@@ -155,13 +153,17 @@ def player_detail(request, player_id):
         "bullets/player_detail.html",
         {
             "player": player,
+            "seasons": seasons,
+            "selected_season": selected_season,
             "matches": match_rows,
             "opponents": sorted(
                 opponent_counts.items(),
                 key=lambda item: (-item[1], item[0].name.casefold()),
             ),
             "played_count": played_count,
-            "refereed_count": Match.objects.filter(referee=player, is_relevant=True).count(),
+            "refereed_count": Match.objects.filter(
+                referee=player, evening__season=selected_season
+            ).count(),
             "totals": totals,
             "high_finish_values": high_finish_values,
             "least_darts_values": least_darts_values,
@@ -187,7 +189,13 @@ def seasons(request):
 
 
 def season_detail(request, season_id):
-    return season_standings_view(request, season_id)
+    season = get_object_or_404(Season, pk=season_id)
+    context = _season_standings_context(request, season)
+    return render(
+        request,
+        "bullets/season_detail.html",
+        context,
+    )
 
 
 def delete_season(request, season_id):
@@ -201,7 +209,7 @@ def delete_season(request, season_id):
         {
             "season": season,
             "evening_count": season.evenings.count(),
-            "match_count": Match.objects.filter(evening__season=season, is_relevant=True).count(),
+            "match_count": Match.objects.filter(evening__season=season).count(),
         },
     )
 
@@ -237,7 +245,7 @@ def _evening_context(evening):
     )
     players = [attendance.player for attendance in attendances]
     matches = list(
-        evening.matches.filter(is_relevant=True).select_related("player1", "player2", "referee")
+        evening.matches.select_related("player1", "player2", "referee")
         .prefetch_related("stats")
         .order_by("number")
     )
@@ -326,22 +334,6 @@ def _evening_context(evening):
         for match in matches
         for stat in match.stats.all()
         if stat.is_stroman
-    )
-    opponent_pairs = Counter(
-        tuple(sorted((match.player1_id, match.player2_id)))
-        for match in matches
-        if match.player2_id is not None
-    )
-    duplicate_opponents = Counter()
-    for pair, count in opponent_pairs.items():
-        for player_id in pair:
-            duplicate_opponents[player_id] += count - 1
-    duplicate_opponents_total = sum(
-        duplicate_opponents[player.id] for player in players
-    )
-    duplicate_opponents_allowed = evening.match_count >= len(players)
-    duplicate_opponents_valid = (
-        duplicate_opponents_total == 0 or duplicate_opponents_allowed
     )
     max_points = max((row["points"] for row in standings), default=0)
     for row in standings:
@@ -456,9 +448,6 @@ def _evening_context(evening):
             "blocks_valid": blocks_valid,
             "referees_valid": referees_valid,
             "referee_distribution_valid": referee_distribution_valid,
-            "duplicate_opponents": duplicate_opponents_total,
-            "duplicate_opponents_allowed": duplicate_opponents_allowed,
-            "duplicate_opponents_valid": duplicate_opponents_valid,
             "valid": (
                 len(matches) == expected_total_matches
                 and stroman_match_total == expected_stroman_matches
@@ -476,7 +465,6 @@ def _evening_context(evening):
                 and blocks_valid
                 and referees_valid
                 and referee_distribution_valid
-                and duplicate_opponents_valid
             ),
         },
         "match_audit": [
@@ -488,11 +476,6 @@ def _evening_context(evening):
                 ),
                 "stroman_matches": stroman_match_counts[attendance.player_id],
                 "referees": referee_counts[attendance.player_id],
-                "duplicate_opponents": duplicate_opponents[attendance.player_id],
-                "duplicate_opponents_valid": (
-                    duplicate_opponents[attendance.player_id] == 0
-                    or duplicate_opponents_allowed
-                ),
                 "max_consecutive_rest": max_consecutive_rest[attendance.player_id],
                 "max_consecutive_matches": max_consecutive_matches[attendance.player_id],
                 "expected_matches": evening.match_count,
@@ -533,8 +516,33 @@ def evening_detail(request, evening_id):
     evening = get_object_or_404(Evening.objects.select_related("season"), pk=evening_id)
     context = _evening_context(evening)
     context["can_regenerate_schedule"] = not evening_has_results(evening)
-    context["evening_detail_path"] = reverse("evening_detail", args=[evening.id])
     return render(request, "bullets/evening_detail.html", context)
+
+
+def _redirect_to_evening(request, evening_id):
+    next_url = request.POST.get("next", "")
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect("evening_detail", evening_id=evening_id)
+
+
+@require_POST
+def clear_evening_called(request, evening_id):
+    evening = get_object_or_404(Evening, pk=evening_id)
+    evening.matches.update(is_called=False)
+    return _redirect_to_evening(request, evening_id)
+
+
+@require_POST
+def toggle_match_called(request, match_id):
+    match = get_object_or_404(Match.objects.select_related("evening"), pk=match_id)
+    match.is_called = request.POST.get("is_called") == "on"
+    match.save(update_fields=["is_called"])
+    return _redirect_to_evening(request, match.evening_id)
 
 
 def evening_standings_view(request, evening_id):
@@ -546,7 +554,7 @@ def evening_standings_view(request, evening_id):
 
 def evening_standings_live_state(request, evening_id):
     evening = get_object_or_404(Evening, pk=evening_id)
-    complete_count = Match.objects.filter(evening=evening, is_relevant=True).filter(
+    complete_count = Match.objects.filter(evening=evening).filter(
         stats__legs_won__isnull=False
     ).distinct().count()
     return JsonResponse(
@@ -590,10 +598,8 @@ def edit_match(request, match_id):
         Match.objects.select_related("evening", "evening__season", "player1", "player2", "referee")
         .prefetch_related("stats"),
         pk=match_id,
-        is_relevant=True,
     )
     form = MatchResultForm(request.POST or None, match=match)
-    return_to = _match_return_url(request, match)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             prefixes = [("p1", match.player1)]
@@ -607,7 +613,7 @@ def edit_match(request, match_id):
                 stat.scores_171 = form.cleaned_data[f"{prefix}_171"]
                 stat.least_darts = form.cleaned_data[f"{prefix}_least_darts"]
                 stat.save()
-        return redirect(return_to)
+        return redirect("evening_detail", evening_id=match.evening_id)
     return render(
         request,
         "bullets/match_edit.html",
@@ -615,7 +621,6 @@ def edit_match(request, match_id):
             "match": match,
             "form": form,
             "evening": match.evening,
-            "return_to": return_to,
             "stroman_player_ids": {
                 stat.player_id for stat in match.stats.all() if stat.is_stroman
             },
@@ -623,34 +628,10 @@ def edit_match(request, match_id):
     )
 
 
-@require_POST
-def toggle_match_called(request, match_id):
-    match = get_object_or_404(Match, pk=match_id, is_relevant=True)
-    match.is_called = request.POST.get("is_called") == "on"
-    match.save(update_fields=["is_called"])
-    next_url = (
-        _safe_relative_url(request, request.POST.get("next"))
-        or f"{reverse('evening_detail', args=[match.evening_id])}#match-anchor-{match.id}"
-    )
-    return redirect(next_url)
-
-
-@require_POST
-def clear_evening_called(request, evening_id):
-    evening = get_object_or_404(Evening, pk=evening_id)
-    Match.objects.filter(evening=evening, is_relevant=True, is_called=True).update(
-        is_called=False
-    )
-    next_url = _safe_relative_url(request, request.POST.get("next")) or reverse(
-        "evening_detail", args=[evening.id]
-    )
-    return redirect(next_url)
-
-
 def print_evening(request, evening_id):
     evening = get_object_or_404(Evening.objects.select_related("season"), pk=evening_id)
     matches = list(
-        evening.matches.filter(is_relevant=True).select_related("player1", "player2", "referee").order_by("number")
+        evening.matches.select_related("player1", "player2", "referee").order_by("number")
         .prefetch_related("stats")
     )
     print_matches = []
@@ -690,6 +671,11 @@ def print_evening(request, evening_id):
 
 def season_standings_view(request, season_id):
     season = get_object_or_404(Season, pk=season_id)
+    context = _season_standings_context(request, season)
+    return render(request, "bullets/season_standings.html", context)
+
+
+def _season_standings_context(request, season):
     evenings = list(season.evenings.order_by("date", "pk"))
     ranking_tabs = [
         {"key": "points", "label": "Punten"},
@@ -726,27 +712,23 @@ def season_standings_view(request, season_id):
     if selected_ranking == "evolution":
         evolution_data = season_evolution(season)
         evolution_data_json = json.dumps(evolution_data)
-    
-    return render(
-        request,
-        "bullets/season_standings.html",
-        {
-            "season": season,
-            "standings": standings,
-            "evenings": evenings,
-            "selected_evening": selected_evening,
-            "selected_number": selected_index + 1,
-            "previous_evening": evenings[selected_index - 1] if selected_index > 0 else None,
-            "next_evening": (
-                evenings[selected_index + 1] if selected_index + 1 < len(evenings) else None
-            ),
-            "ranking_tabs": ranking_tabs,
-            "selected_ranking": selected_ranking,
-            "ranking_label": ranking_labels[selected_ranking],
-            "show_position_change": selected_ranking == "points",
-            "evolution_data_json": evolution_data_json,
-        },
-    )
+
+    return {
+        "season": season,
+        "standings": standings,
+        "evenings": evenings,
+        "selected_evening": selected_evening,
+        "selected_number": selected_index + 1,
+        "previous_evening": evenings[selected_index - 1] if selected_index > 0 else None,
+        "next_evening": (
+            evenings[selected_index + 1] if selected_index + 1 < len(evenings) else None
+        ),
+        "ranking_tabs": ranking_tabs,
+        "selected_ranking": selected_ranking,
+        "ranking_label": ranking_labels[selected_ranking],
+        "show_position_change": selected_ranking == "points",
+        "evolution_data_json": evolution_data_json,
+    }
 
 
 def wordpress_export_view(request, season_id):

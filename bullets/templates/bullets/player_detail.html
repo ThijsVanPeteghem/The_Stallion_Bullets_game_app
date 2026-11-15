@@ -6,8 +6,13 @@
   <div><h1>{{ player.name }}</h1><p class="muted">{% if player.active %}Actief{% else %}Inactief{% endif %} · {{ played_count }} gespeelde wedstrijden</p></div>
   <a class="button button-secondary" href="{% url 'edit_player' player.id %}">Speler bewerken</a>
 </div>
+{% if seasons %}
+<nav class="page-tabs" aria-label="Seizoen kiezen">
+  {% for season in seasons %}<a href="?season={{ season.id }}"{% if selected_season.id == season.id %} class="active" aria-current="page"{% endif %}>{{ season.name }}</a>{% endfor %}
+</nav>
+{% endif %}
 <section class="panel">
-  <h2>Statistieken</h2>
+  <h2>Statistieken{% if selected_season %} · {{ selected_season.name }}{% endif %}</h2>
   <div class="table-wrap"><table class="player-stat-table">
     <thead><tr><th>Statistiek</th><th>Aantal</th><th></th></tr></thead>
     <tbody>

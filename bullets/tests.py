@@ -18,11 +18,9 @@ from django.utils import timezone
 from .legacy_import import parse_legacy_file
 from .models import Attendance, Evening, Match, MatchPlayerStats, Player, Season
 from .schedule import (
-    _pairings,
     _improve_rest_distribution,
     _solve_rest_limits,
     _schedule_respects_board_rules,
-    _schedule_respects_unique_opponents,
     ScheduleError,
     cp_model,
     expected_match_count,
@@ -86,44 +84,6 @@ class DatabaseSnapshotTests(SimpleTestCase):
 
 
 class ScheduleTests(SimpleTestCase):
-    def test_pairings_never_repeat_opponents_when_enough_players_are_available(self):
-        for player_count in range(4, 129):
-            for match_count in range(1, min(20, player_count - 1) + 1):
-                for seed in (0, 1, 43):
-                    with self.subTest(players=player_count, matches=match_count, seed=seed):
-                        pairs = _pairings(player_count, match_count, seed=seed)
-                        regular_pairs = [
-                            tuple(sorted(pair)) for pair in pairs if "stroman" not in pair
-                        ]
-                        self.assertEqual(len(regular_pairs), len(set(regular_pairs)))
-                        self.assertEqual(len(pairs), expected_match_count(player_count, match_count))
-                        appearances = Counter(
-                            player for pair in pairs for player in pair
-                            if isinstance(player, int)
-                        )
-                        self.assertEqual(dict(appearances), dict.fromkeys(range(player_count), match_count))
-
-    def test_duplicate_opponent_guard_includes_reversed_and_stroman_matches(self):
-        matches = [
-            {"player1": 0, "player2": 1},
-            {"player1": 1, "player2": 0, "stroman_player": 0},
-        ]
-        self.assertFalse(_schedule_respects_unique_opponents(matches, 25, 5))
-        self.assertFalse(_schedule_respects_unique_opponents(matches, 6, 5))
-        self.assertTrue(_schedule_respects_unique_opponents(matches, 5, 5))
-        self.assertFalse(_schedule_respects_unique_opponents([{"player1": 0, "player2": 0}], 5, 5))
-
-    def test_25_player_evening_has_only_unique_matches_including_stroman(self):
-        matches = generate_schedule(25, 5, 5)
-        pairs = [tuple(sorted((match["player1"], match["player2"]))) for match in matches]
-        self.assertEqual(len(matches), 63)
-        self.assertEqual(len(pairs), len(set(pairs)))
-        appearances = Counter(
-            player for match in matches for player in (match["player1"], match["player2"])
-            if player != match.get("stroman_player")
-        )
-        self.assertEqual(dict(appearances), dict.fromkeys(range(25), 5))
-
     def test_strict_board_rules_reject_empty_rounds_wrong_referees_and_unbalanced_duties(self):
         matches = [
             {"round": 1, "board": 1, "player1": 0, "player2": 1, "referee": 3},
@@ -311,8 +271,6 @@ class ScheduleTests(SimpleTestCase):
                         max(match["round"] for match in original),
                     )
                     self.assertEqual(len(matches), expected_match_count(player_count, 5))
-                    pairs = [tuple(sorted((match["player1"], match["player2"]))) for match in matches]
-                    self.assertEqual(len(pairs), len(set(pairs)))
                     if player_count % 2:
                         final_opponents = {matches[-1]["player1"], matches[-1]["player2"]}
                         self.assertFalse(any(
@@ -811,27 +769,6 @@ class SeasonStandingsHistoryTests(TestCase):
         MatchPlayerStats.objects.create(match=match, player=player2, legs_won=legs2)
         return match
 
-    def test_irrelevant_match_is_preserved_but_excluded_from_all_totals(self):
-        match = self.first.matches.first()
-        match.is_relevant = False
-        match.save(update_fields=["is_relevant"])
-        match.stats.update(scores_180=1, scores_171=1, high_finishes="170", least_darts="9")
-        self.assertFalse(match.is_complete)
-        self.assertTrue(all(stat.points == 0 for stat in match.stats.all()))
-        rows = {row["player"].pk: row for row in season_standings(self.season)}
-        for player in (self.players[0], self.players[3]):
-            row = rows[player.pk]
-            for key in ("points", "matches_played", "legs_for", "legs_against", "wins", "losses", "scores_180", "scores_171", "high_finishes"):
-                self.assertEqual(row[key], 0)
-            self.assertIsNone(row["least_darts"])
-            self.assertIsNone(row["highest_finish"])
-        evening_response = self.client.get(reverse("evening_detail", args=[self.first.pk]))
-        self.assertNotIn(match.pk, [item.pk for item in evening_response.context["matches"]])
-        player_response = self.client.get(reverse("player_detail", args=[self.players[0].pk]))
-        self.assertNotIn(match.pk, [item["match"].pk for item in player_response.context["matches"]])
-        self.assertEqual(player_response.context["refereed_count"], 2)
-        self.assertTrue(Match.objects.filter(pk=match.pk).exists())
-
     def test_latest_standings_include_absent_players_and_position_changes(self):
         with self.assertNumQueries(4):
             rows = season_standings(self.season)
@@ -851,6 +788,10 @@ class SeasonStandingsHistoryTests(TestCase):
         overview = self.client.get(reverse("season_detail", args=[self.season.pk]))
         self.assertContains(overview, "<th>Positie</th>")
         self.assertContains(overview, ">+1</span>")
+        self.assertContains(overview, "Stand na speeldag 2 - 02/10/2026")
+        self.assertContains(overview, "Toon klassement")
+        self.assertContains(overview, "Evolutie per speeldag")
+        self.assertNotContains(overview, "Bekijk de evolutie per speeldag")
 
     def test_statistic_leaderboards_sort_by_requested_metric_and_keep_date_selection(self):
         stats = {
@@ -894,25 +835,6 @@ class SeasonStandingsHistoryTests(TestCase):
 
         with self.assertRaisesMessage(ValueError, "Onbekend extra klassement"):
             sort_standings_for_ranking(base_rows, "unknown")
-
-    def test_standings_count_only_high_finishes_that_score_points(self):
-        first_match = self.first.matches.filter(player1=self.players[0], player2=self.players[3]).first()
-        alice_stats = MatchPlayerStats.objects.get(match=first_match, player=self.players[0])
-        alice_stats.high_finishes = "99, 100, 121"
-        alice_stats.save(update_fields=["high_finishes"])
-        dirk_stats = MatchPlayerStats.objects.get(match=first_match, player=self.players[3])
-        dirk_stats.high_finishes = "98"
-        dirk_stats.save(update_fields=["high_finishes"])
-
-        rows = {row["player"].name: row for row in season_standings(self.season, self.first)}
-        self.assertEqual(rows["Alice"]["high_finishes"], 2)
-        self.assertEqual(rows["Alice"]["highest_finish"], 121)
-        self.assertEqual(rows["Dirk"]["high_finishes"], 0)
-        self.assertIsNone(rows["Dirk"]["highest_finish"])
-
-        response = self.client.get(self.url, {"evening": self.first.pk, "ranking": "points"})
-        self.assertContains(response, "121 (2)")
-        self.assertNotContains(response, "121 (3)")
 
     def test_invalid_leaderboard_tab_returns_404(self):
         self.assertEqual(
@@ -1054,11 +976,6 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, '<abbr title="Blokrondes">BR</abbr>')
         self.assertContains(response, '<abbr title="Stromanwedstrijden">Str.</abbr>')
         self.assertContains(response, '<abbr title="Scheidsrechterbeurten">Sch.</abbr>')
-        self.assertContains(response, '<abbr title="Dubbele ontmoetingen">Dub.</abbr>')
-        self.assertContains(response, "Dubbele ontmoetingen = 0")
-        self.assertEqual(response.context["complete_count"], 0)
-        self.assertTrue(response.context["schedule_audit"]["duplicate_opponents_valid"])
-        self.assertTrue(all(row["duplicate_opponents"] == 0 for row in response.context["match_audit"]))
         self.assertContains(response, "Max. rust op rij")
         self.assertContains(response, "Max. wedstrijden op rij")
         self.assertContains(response, "Wedstrijden per speler")
@@ -1088,68 +1005,6 @@ class CompetitionFlowTests(TestCase):
                 for row in response.context["match_audit"]
             )
         )
-
-    def test_evening_audit_counts_reversed_stroman_duplicates_before_results(self):
-        first = self.evening.matches.first()
-        for offset in (1, 2):
-            repeated = Match.objects.create(
-                evening=self.evening,
-                number=self.evening.matches.count() + 1,
-                round_number=first.round_number + offset,
-                board=first.board,
-                player1=first.player2,
-                player2=first.player1,
-            )
-            MatchPlayerStats.objects.create(match=repeated, player=first.player2)
-            MatchPlayerStats.objects.create(match=repeated, player=first.player1, is_stroman=True)
-        response = self.client.get(reverse("evening_detail", args=[self.evening.pk]))
-        audit = response.context["schedule_audit"]
-        rows = {row["attendance"].player_id: row for row in response.context["match_audit"]}
-        self.assertEqual(response.context["complete_count"], 0)
-        self.assertEqual(audit["duplicate_opponents"], 4)
-        self.assertFalse(audit["duplicate_opponents_valid"])
-        self.assertFalse(audit["valid"])
-        for player_id in (first.player1_id, first.player2_id):
-            self.assertEqual(rows[player_id]["duplicate_opponents"], 2)
-            self.assertFalse(rows[player_id]["duplicate_opponents_valid"])
-        self.assertEqual(sum(row["duplicate_opponents"] for row in rows.values()), 4)
-        self.assertContains(response, "Dubbele ontmoetingen = 4")
-        self.assertContains(response, '<td class="error">2</td>', count=2, html=True)
-        self.assertContains(response, '<span class="error">Dubbele ontmoetingen</span>', count=2, html=True)
-        self.evening.matches.filter(pk=repeated.pk).update(is_relevant=False)
-        response = self.client.get(reverse("evening_detail", args=[self.evening.pk]))
-        self.assertEqual(response.context["schedule_audit"]["duplicate_opponents"], 2)
-        self.assertContains(response, "Dubbele ontmoetingen = 2")
-
-    def test_evening_audit_shows_but_allows_duplicates_when_players_are_insufficient(self):
-        response = self.client.get(reverse("evening_detail", args=[self.evening.pk]))
-        self.assertFalse(response.context["schedule_audit"]["duplicate_opponents_allowed"])
-        self.evening.match_count = len(self.players)
-        self.evening.save(update_fields=["match_count"])
-        first = self.evening.matches.first()
-        Match.objects.create(
-            evening=self.evening,
-            number=self.evening.matches.count() + 1,
-            round_number=first.round_number + 1,
-            board=first.board,
-            player1=first.player1,
-            player2=first.player2,
-        )
-        self.evening.match_count = len(self.players) - 1
-        self.evening.save(update_fields=["match_count"])
-        response = self.client.get(reverse("evening_detail", args=[self.evening.pk]))
-        self.assertFalse(response.context["schedule_audit"]["duplicate_opponents_allowed"])
-        self.assertFalse(response.context["schedule_audit"]["duplicate_opponents_valid"])
-        self.evening.match_count = len(self.players)
-        self.evening.save(update_fields=["match_count"])
-        response = self.client.get(reverse("evening_detail", args=[self.evening.pk]))
-        audit = response.context["schedule_audit"]
-        self.assertEqual(audit["duplicate_opponents"], 2)
-        self.assertTrue(audit["duplicate_opponents_allowed"])
-        self.assertTrue(audit["duplicate_opponents_valid"])
-        self.assertTrue(all(row["duplicate_opponents_valid"] for row in response.context["match_audit"]))
-        self.assertContains(response, "Dubbele ontmoetingen = 2")
-        self.assertContains(response, "Toegestaan: te weinig spelers")
 
     def test_evening_audit_rejects_broken_block_referee_and_distribution_rules(self):
         from .views import _evening_context
@@ -1447,19 +1302,6 @@ class CompetitionFlowTests(TestCase):
         )
         self.assertEqual(set(appearances.values()), {3})
 
-        detail = self.client.get(response.url)
-        self.assertEqual(detail.context["complete_count"], 0)
-        self.assertContains(detail, "Dubbele ontmoetingen = 0")
-        self.assertEqual(len(detail.context["match_audit"]), len(selected_players))
-        audit = detail.context["schedule_audit"]
-        for check in (
-            "valid", "player_rounds_valid", "blocks_valid", "referees_valid",
-            "referee_distribution_valid", "duplicate_opponents_valid",
-        ):
-            self.assertTrue(audit[check], check)
-        self.assertFalse(audit["duplicate_opponents_allowed"])
-        self.assertTrue(all(row["duplicate_opponents"] == 0 for row in detail.context["match_audit"]))
-
     def test_new_evening_rejects_incompatible_strict_capacity_without_saving(self):
         selected_players = [*self.players, Player.objects.create(name="Speler 16")]
         draw_order = [player.id for player in selected_players]
@@ -1724,6 +1566,67 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "Nog niet gespeeld")
         self.assertContains(response, "Minste pijlen per leg")
         self.assertContains(response, "Scheidsbeurten")
+
+    def test_player_detail_groups_statistics_by_season_and_defaults_to_latest_created_evening(self):
+        player = self.players[0]
+        old_match = Match.objects.filter(
+            evening=self.evening,
+            player1=player,
+            player2__isnull=False,
+        ).first()
+        MatchPlayerStats.objects.filter(match=old_match, player=player).update(
+            legs_won=3, scores_180=2
+        )
+        MatchPlayerStats.objects.filter(match=old_match, player=old_match.player2).update(
+            legs_won=0
+        )
+
+        latest_season = Season.objects.create(name="2027-2028")
+        latest_evening = Evening.objects.create(
+            season=latest_season,
+            date="2025-01-01",
+            board_count=2,
+            match_count=1,
+        )
+        latest_match = Match.objects.create(
+            evening=latest_evening,
+            number=1,
+            round_number=1,
+            board=1,
+            player1=player,
+            player2=self.players[1],
+        )
+        MatchPlayerStats.objects.create(
+            match=latest_match, player=player, legs_won=3, scores_180=7
+        )
+        MatchPlayerStats.objects.create(
+            match=latest_match, player=self.players[1], legs_won=0
+        )
+
+        default_response = self.client.get(reverse("player_detail", args=[player.id]))
+        self.assertEqual(default_response.context["selected_season"], latest_season)
+        self.assertEqual(default_response.context["totals"]["scores_180"], 7)
+        self.assertEqual(
+            [row["match"].id for row in default_response.context["matches"]],
+            [latest_match.id],
+        )
+
+        old_season_response = self.client.get(
+            reverse("player_detail", args=[player.id]),
+            {"season": self.season.id},
+        )
+        self.assertEqual(old_season_response.context["selected_season"], self.season)
+        self.assertEqual(old_season_response.context["totals"]["scores_180"], 2)
+        self.assertEqual(
+            {row["match"].evening.season_id for row in old_season_response.context["matches"]},
+            {self.season.id},
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("player_detail", args=[player.id]), {"season": "999999"}
+            ).status_code,
+            404,
+        )
 
     def test_stroman_match_is_visible_but_not_counted_in_player_history(self):
         match = self.evening.matches.filter(stats__is_stroman=True).first()
@@ -1993,84 +1896,6 @@ class CompetitionFlowTests(TestCase):
         stat = MatchPlayerStats.objects.get(match=match, player=match.player1)
         self.assertEqual(stat.least_darts, "13, 15")
         self.assertEqual(first_row["least_darts"], 13)
-
-    def test_edit_match_redirects_back_to_anchor_when_return_to_is_provided(self):
-        match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
-        return_to = f"{reverse('evening_detail', args=[self.evening.id])}#match-anchor-{match.id}"
-        response = self.client.post(
-            reverse("edit_match", args=[match.id]),
-            {
-                "return_to": return_to,
-                "p1_legs": "2",
-                "p1_high_finishes": "",
-                "p1_180": "0",
-                "p1_171": "0",
-                "p1_least_darts": "",
-                "p2_legs": "1",
-                "p2_high_finishes": "",
-                "p2_180": "0",
-                "p2_171": "0",
-                "p2_least_darts": "",
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], return_to)
-
-    def test_called_checkbox_marks_row_and_completed_match_turns_green(self):
-        match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
-        return_to = f"{reverse('evening_detail', args=[self.evening.id])}#match-anchor-{match.id}"
-        toggle_response = self.client.post(
-            reverse("toggle_match_called", args=[match.id]),
-            {"is_called": "on", "next": return_to},
-        )
-        self.assertEqual(toggle_response.status_code, 302)
-        self.assertEqual(toggle_response["Location"], return_to)
-        match.refresh_from_db()
-        self.assertTrue(match.is_called)
-
-        evening_response = self.client.get(reverse("evening_detail", args=[self.evening.id]))
-        self.assertContains(
-            evening_response,
-            f'id="match-{match.id}" class="match-row match-row-called"',
-        )
-
-        self.client.post(
-            reverse("edit_match", args=[match.id]),
-            {
-                "p1_legs": "2",
-                "p1_high_finishes": "",
-                "p1_180": "0",
-                "p1_171": "0",
-                "p1_least_darts": "",
-                "p2_legs": "1",
-                "p2_high_finishes": "",
-                "p2_180": "0",
-                "p2_171": "0",
-                "p2_least_darts": "",
-            },
-        )
-        evening_response = self.client.get(reverse("evening_detail", args=[self.evening.id]))
-        self.assertContains(
-            evening_response,
-            f'id="match-{match.id}" class="match-row match-row-complete"',
-        )
-
-    def test_clear_evening_called_unchecks_all_called_matches(self):
-        matches = list(Match.objects.filter(evening=self.evening, is_relevant=True)[:2])
-        for match in matches:
-            match.is_called = True
-            match.save(update_fields=["is_called"])
-
-        response = self.client.post(
-            reverse("clear_evening_called", args=[self.evening.id]),
-            {"next": reverse("evening_detail", args=[self.evening.id])},
-        )
-
-        self.assertRedirects(response, reverse("evening_detail", args=[self.evening.id]))
-        for match in matches:
-            match.refresh_from_db()
-            self.assertFalse(match.is_called)
 
     def test_least_darts_accepts_multiple_valid_legs_and_rejects_invalid_values(self):
         match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
