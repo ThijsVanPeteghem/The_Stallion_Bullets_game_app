@@ -1,0 +1,76 @@
+{% extends "bullets/base.html" %}
+{% block title %}Validatie {{ evening.date|date:"d/m/Y" }} | The Stallion Bullets{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{% url 'season_detail' evening.season_id %}">{{ evening.season }}</a> · {{ evening.date|date:"d/m/Y" }}</p>
+<div class="section-heading">
+  <div><h1>Validatie van de avond</h1><p class="muted">Overzicht van controles met drempelwaarden en resultaten.</p></div>
+  <a class="button button-secondary" href="{% url 'evening_detail' evening.id %}">Naar wedstrijdschema</a>
+</div>
+{% include "bullets/evening_tabs.html" with active_tab="validation" %}
+<section class="panel">
+  <h2>Samenvatting</h2>
+  <p>
+    {% if schedule_audit.valid %}
+      <span class="badge">OK</span> Alle kerncontroles zijn geslaagd.
+    {% else %}
+      <span class="error">Controle mislukt</span> Minstens één kerncontrole is niet geslaagd.
+    {% endif %}
+  </p>
+  {% if attention_items %}
+    <ul class="attention-list">
+      {% for item in attention_items %}
+        <li class="attention-item attention-{{ item.severity }}">
+          <strong>{{ item.title }}</strong> — {{ item.detail }}
+          {% if item.match_refs %}
+            <span class="muted">
+              (
+              {% for match in item.match_refs %}
+                <a href="{% url 'evening_detail' evening.id %}#match-anchor-{{ match.id }}">wedstrijd {{ match.number }}</a>{% if not forloop.last %}, {% endif %}
+              {% endfor %}
+              {% if item.remaining_match_count %}
+                + {{ item.remaining_match_count }} meer
+              {% endif %}
+              )
+            </span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Geen aandachtspunten gevonden.</p>
+  {% endif %}
+</section>
+{% for group in validation_groups %}
+  <section class="panel">
+    <h2>{{ group.label }}</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Controle</th>
+            <th>Status</th>
+            <th>Resultaat</th>
+            <th>Drempel</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for check in group.checks %}
+            <tr>
+              <td>{{ check.label }}</td>
+              <td>
+                {% if check.ok %}
+                  <span class="status-pill status-ok">Pass</span>
+                {% else %}
+                  <span class="status-pill status-error">Fail</span>
+                {% endif %}
+              </td>
+              <td>{{ check.detail }}</td>
+              <td>{{ check.threshold }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endfor %}
+{% endblock %}

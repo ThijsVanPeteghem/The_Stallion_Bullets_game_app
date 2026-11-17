@@ -14,20 +14,71 @@
 {% include "bullets/evening_tabs.html" with active_tab="matches" %}
 <section class="panel">
   <div class="section-heading">
+    <h2>Aandachtspunten</h2>
+    {% if schedule_audit.valid %}
+      <span class="status-pill status-ok">Alles OK</span>
+    {% else %}
+      <span class="status-pill status-error">Controle vereist</span>
+    {% endif %}
+  </div>
+  {% if attention_items %}
+    <ul class="attention-list">
+      {% for item in attention_items %}
+        <li class="attention-item attention-{{ item.severity }}">
+          <strong>{{ item.title }}</strong> — {{ item.detail }}
+          {% if item.match_refs %}
+            <span class="muted">
+              (
+              {% for match in item.match_refs %}
+                <a href="#match-anchor-{{ match.id }}">wedstrijd {{ match.number }}</a>{% if not forloop.last %}, {% endif %}
+              {% endfor %}
+              {% if item.remaining_match_count %}
+                + {{ item.remaining_match_count }} meer
+              {% endif %}
+              )
+            </span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Geen aandachtspunten gevonden.</p>
+  {% endif %}
+</section>
+<section class="panel">
+  <div class="section-heading">
     <h2>Wedstrijdschema</h2>
-    <form method="post" action="{% url 'clear_evening_called' evening.id %}">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ evening_detail_path }}">
-      <button class="button button-secondary" type="submit">Afgeroepen deselecteren</button>
-    </form>
+    <div class="actions">
+      <label class="inline-toggle">
+        <input type="checkbox" id="show-issues-only">
+        Alleen afwijkingen tonen
+      </label>
+      <form method="post" action="{% url 'clear_evening_called' evening.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ evening_detail_path }}">
+        <button class="button button-secondary" type="submit">Afgeroepen deselecteren</button>
+      </form>
+    </div>
   </div>
   <p class="muted">Markeer een wedstrijd als afgeroepen. Rijen kleuren lichtoranje wanneer afgeroepen en lichtgroen zodra de uitslag is ingevuld.</p>
   <div class="table-wrap">
-  <table>
+  <table class="evening-schedule-table">
+    <colgroup>
+      <col class="col-match-number">
+      <col class="col-round">
+      <col class="col-board">
+      <col class="col-sr">
+      <col class="col-fixture">
+      <col class="col-result">
+      <col class="col-referee">
+      <col class="col-called">
+      <col class="col-action">
+      <col class="copy-only" style="display:none">
+    </colgroup>
     <thead><tr><th>#</th><th>Ronde</th><th>Blok</th><th><abbr title="Spelersronde">SR</abbr></th><th>Wedstrijd</th><th>Uitslag</th><th>Scheidsrechter</th><th>Afg.</th><th></th><th class="copy-only" style="display:none">Worpen, finishes en pijlen</th></tr></thead>
     <tbody>
     {% for match in matches %}
-      <tr id="match-{{ match.id }}" class="match-row{% if match.is_complete %} match-row-complete{% elif match.is_called %} match-row-called{% endif %}">
+      <tr id="match-{{ match.id }}" data-has-issue="{% if match.id in issue_match_ids %}1{% else %}0{% endif %}" class="match-row{% if match.is_complete %} match-row-complete{% elif match.is_called %} match-row-called{% endif %}{% if match.id in issue_match_ids %} match-row-issue{% endif %}">
         <td><span id="match-anchor-{{ match.id }}" class="match-anchor" aria-hidden="true"></span>{{ match.number }}</td><td>{{ match.round_number }}</td><td>{{ match.board }}</td>
         <td>{{ match.player1_player_round|default_if_none:"—" }} / {{ match.player2_player_round|default_if_none:"—" }}</td>
         <td><a href="{% url 'player_detail' match.player1_id %}">{{ match.player1 }}</a>{% if match.stroman_player_id == match.player1_id %} <span class="badge">Speelt stroman</span>{% endif %} <span class="muted">vs</span> {% if match.player2 %}<a href="{% url 'player_detail' match.player2_id %}">{{ match.player2 }}</a>{% if match.stroman_player_id == match.player2_id %} <span class="badge">Speelt stroman</span>{% endif %}{% else %}<span class="muted">Stroman (virtuele tegenstander)</span>{% endif %}</td>
@@ -50,10 +101,18 @@
             >
           </form>
         </td>
-        <td><a href="{% url 'edit_match' match.id %}?return_to={{ evening_detail_path }}%23match-anchor-{{ match.id }}">{% if match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a></td>
+        <td>
+          <a href="{% url 'edit_match' match.id %}?return_to={{ evening_detail_path }}%23match-anchor-{{ match.id }}">{% if match.is_complete %}Bewerken{% else %}Invullen{% endif %}</a>
+          {% if match.id in match_issue_map %}
+            <div class="row-issues"><span class="status-pill status-warning">Afwijking</span></div>
+          {% endif %}
+        </td>
         <td class="copy-only" style="display:none">{% for stat in match.stats.all %}{{ stat.player.name }}{% if stat.is_stroman %} (Stroman){% endif %}: 171 {{ stat.scores_171 }}, 180 {{ stat.scores_180 }}, HF {{ stat.high_finishes|default:"—" }}, MP {{ stat.least_darts|default:"—" }}{% if not forloop.last %}; {% endif %}{% endfor %}</td>
       </tr>
     {% endfor %}
+      <tr id="issue-filter-empty" hidden>
+        <td colspan="10" class="muted">Geen wedstrijden met afwijkingen in dit overzicht.</td>
+      </tr>
     </tbody>
   </table>
   </div>
@@ -109,4 +168,27 @@
     {% endfor %}</tbody>
   </table></div>
 </section>
+<script>
+(() => {
+  const toggle = document.getElementById("show-issues-only");
+  const rows = [...document.querySelectorAll("tr[data-has-issue]")];
+  const emptyRow = document.getElementById("issue-filter-empty");
+  if (!toggle || rows.length === 0 || !emptyRow) {
+    return;
+  }
+  const renderFilter = () => {
+    let visibleCount = 0;
+    rows.forEach((row) => {
+      const show = !toggle.checked || row.dataset.hasIssue === "1";
+      row.hidden = !show;
+      if (show) {
+        visibleCount += 1;
+      }
+    });
+    emptyRow.hidden = visibleCount > 0;
+  };
+  toggle.addEventListener("change", renderFilter);
+  renderFilter();
+})();
+</script>
 {% endblock %}

@@ -1,4 +1,5 @@
 <div class="page-tabs" aria-label="Competitieavond">
   <a href="{% url 'evening_detail' evening.id %}"{% if active_tab == "matches" %} class="active" aria-current="page"{% endif %}>Wedstrijdschema</a>
   <a href="{% url 'evening_standings' evening.id %}"{% if active_tab == "standings" %} class="active" aria-current="page"{% endif %}>Tussenstand</a>
+  <a href="{% url 'evening_validation' evening.id %}"{% if active_tab == "validation" %} class="active" aria-current="page"{% endif %}>Validatie</a>
 </div>

@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Max, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -465,94 +466,331 @@ def _evening_context(evening):
     referee_distribution_valid = (
         max(duty_counts, default=0) - min(duty_counts, default=0) <= 1
     )
+    schedule_audit = {
+        "expected_matches": expected_total_matches,
+        "actual_matches": len(matches),
+        "expected_stroman_matches": expected_stroman_matches,
+        "actual_stroman_matches": stroman_match_total,
+        "player_round_overlaps": player_round_overlaps,
+        "player_rounds_valid": player_rounds_valid and player_round_gaps_valid,
+        "blocks_valid": blocks_valid,
+        "referees_valid": referees_valid,
+        "referee_distribution_valid": referee_distribution_valid,
+        "duplicate_opponents": duplicate_opponents_total,
+        "duplicate_opponents_allowed": duplicate_opponents_allowed,
+        "duplicate_opponents_valid": duplicate_opponents_valid,
+        "valid": (
+            len(matches) == expected_total_matches
+            and stroman_match_total == expected_stroman_matches
+            and stroman_match_is_last
+            and all(
+                match_counts[attendance.player_id]
+                - stroman_match_counts[attendance.player_id]
+                == evening.match_count
+                and stroman_match_counts[attendance.player_id] <= 1
+                for attendance in attendances
+            )
+            and rounds_valid
+            and player_rounds_valid
+            and player_round_gaps_valid
+            and blocks_valid
+            and referees_valid
+            and referee_distribution_valid
+            and duplicate_opponents_valid
+        ),
+    }
+    match_audit = [
+        {
+            "attendance": attendance,
+            "matches": (
+                match_counts[attendance.player_id]
+                - stroman_match_counts[attendance.player_id]
+            ),
+            "stroman_matches": stroman_match_counts[attendance.player_id],
+            "duplicate_opponents": duplicate_opponents_by_player[
+                attendance.player_id
+            ],
+            "duplicate_opponents_valid": duplicate_opponents_valid_by_player[
+                attendance.player_id
+            ],
+            "referees": referee_counts[attendance.player_id],
+            "max_consecutive_rest": max_consecutive_rest[attendance.player_id],
+            "max_consecutive_matches": max_consecutive_matches[attendance.player_id],
+            "expected_matches": evening.match_count,
+            "block_rounds": ", ".join(
+                str(block_round)
+                for block_round in sorted(
+                    block_rounds_by_player.get(attendance.player_id, [])
+                )
+            ),
+            "player_round_number": max(
+                player_rounds_by_player.get(attendance.player_id, []),
+                default=0,
+            ),
+            "player_rounds": ", ".join(
+                str(value)
+                for value in player_rounds_by_player.get(
+                    attendance.player_id, []
+                )
+            ),
+            "player_rounds_valid": (
+                player_rounds_by_player.get(attendance.player_id, [])
+                == list(
+                    range(
+                        1,
+                        evening.match_count
+                        + stroman_match_counts[attendance.player_id]
+                        + 1,
+                    )
+                )
+            ),
+        }
+        for attendance in attendances
+    ]
+    duplicate_pair_counts = Counter()
+    for match in matches:
+        if match.player1_id is None or match.player2_id is None:
+            continue
+        pair = tuple(sorted((match.player1_id, match.player2_id)))
+        duplicate_pair_counts[pair] += 1
+    duplicate_pair_match_ids = {
+        match.id
+        for match in matches
+        if match.player1_id is not None
+        and match.player2_id is not None
+        and duplicate_pair_counts[tuple(sorted((match.player1_id, match.player2_id)))] > 1
+    }
+    missing_referee_match_ids = {
+        match.id for match in matches if match.referee_id is None
+    }
+    incomplete_match_ids = {
+        match.id for match in matches if not match.is_complete
+    }
+    player_round_conflict_match_ids = set()
+    participant_round_match = {}
+    for match in matches:
+        for player_id in (match.player1_id, match.player2_id):
+            if player_id is None:
+                continue
+            key = (match.round_number, player_id)
+            conflict_match_id = participant_round_match.get(key)
+            if conflict_match_id is not None:
+                player_round_conflict_match_ids.add(conflict_match_id)
+                player_round_conflict_match_ids.add(match.id)
+            else:
+                participant_round_match[key] = match.id
+    board_conflict_match_ids = set()
+    round_board_match = {}
+    for match in matches:
+        key = (match.round_number, match.board)
+        conflict_match_id = round_board_match.get(key)
+        if conflict_match_id is not None:
+            board_conflict_match_ids.add(conflict_match_id)
+            board_conflict_match_ids.add(match.id)
+        else:
+            round_board_match[key] = match.id
+    match_issues = {}
+    match_number_by_id = {match.id: match.number for match in matches}
+
+    def add_match_issue(match_ids, message):
+        for match_id in sorted(match_ids):
+            match_issues.setdefault(match_id, []).append(message)
+
+    add_match_issue(missing_referee_match_ids, "Geen scheidsrechter toegewezen.")
+    add_match_issue(
+        duplicate_pair_match_ids,
+        "Spelersduo komt meerdere keren voor.",
+    )
+    add_match_issue(
+        player_round_conflict_match_ids,
+        "Speler staat meerdere keren in dezelfde ronde.",
+    )
+    add_match_issue(
+        board_conflict_match_ids,
+        "Dartsblok wordt dubbel gebruikt in dezelfde ronde.",
+    )
+    issue_match_ids = sorted(match_issues)
+    attention_items = []
+
+    def add_attention_item(*, severity, title, detail, match_ids=None):
+        sorted_match_ids = sorted(match_ids or [])
+        limited_match_refs = [
+            {
+                "id": match_id,
+                "number": match_number_by_id.get(match_id, match_id),
+            }
+            for match_id in sorted_match_ids[:8]
+        ]
+        attention_items.append(
+            {
+                "severity": severity,
+                "title": title,
+                "detail": detail,
+                "match_refs": limited_match_refs,
+                "remaining_match_count": max(0, len(sorted_match_ids) - 8),
+            }
+        )
+
+    if incomplete_match_ids:
+        add_attention_item(
+            severity="info",
+            title="Niet alle uitslagen zijn ingevuld",
+            detail=f"{len(incomplete_match_ids)} wedstrijden hebben nog geen uitslag.",
+            match_ids=incomplete_match_ids,
+        )
+    if schedule_audit["actual_matches"] != schedule_audit["expected_matches"]:
+        add_attention_item(
+            severity="fout",
+            title="Aantal wedstrijden wijkt af",
+            detail=(
+                f"Verwacht {schedule_audit['expected_matches']}, "
+                f"gevonden {schedule_audit['actual_matches']}."
+            ),
+        )
+    if (
+        schedule_audit["actual_stroman_matches"]
+        != schedule_audit["expected_stroman_matches"]
+    ):
+        add_attention_item(
+            severity="fout",
+            title="Stromanwedstrijden kloppen niet",
+            detail=(
+                f"Verwacht {schedule_audit['expected_stroman_matches']}, "
+                f"gevonden {schedule_audit['actual_stroman_matches']}."
+            ),
+        )
+    if not schedule_audit["blocks_valid"]:
+        add_attention_item(
+            severity="fout",
+            title="Blokindeling bevat conflicten",
+            detail="Niet elke ronde gebruikt geldige en unieke dartsblokken.",
+            match_ids=board_conflict_match_ids,
+        )
+    if not schedule_audit["referees_valid"]:
+        add_attention_item(
+            severity="fout",
+            title="Scheidsrechterrotatie ongeldig",
+            detail="Minstens één wedstrijd heeft een ongeldige scheidsrechtertoewijzing.",
+            match_ids=missing_referee_match_ids,
+        )
+    if not schedule_audit["referee_distribution_valid"]:
+        add_attention_item(
+            severity="waarschuwing",
+            title="Scheidsrechterverdeling is oneven",
+            detail="Sommige spelers schrijven duidelijk vaker dan anderen.",
+        )
+    if not schedule_audit["player_rounds_valid"]:
+        add_attention_item(
+            severity="fout",
+            title="Spelersrondes bevatten overlap",
+            detail="Een of meer spelers krijgen ongeldige of overlappende rondes.",
+            match_ids=player_round_conflict_match_ids,
+        )
+    if schedule_audit["duplicate_opponents"]:
+        if schedule_audit["duplicate_opponents_allowed"]:
+            add_attention_item(
+                severity="info",
+                title="Dubbele ontmoetingen zijn toegestaan",
+                detail=(
+                    f"{schedule_audit['duplicate_opponents']} extra ontmoetingen "
+                    "door beperkte groepgrootte."
+                ),
+                match_ids=duplicate_pair_match_ids,
+            )
+        else:
+            add_attention_item(
+                severity="waarschuwing",
+                title="Te veel dubbele ontmoetingen",
+                detail=(
+                    f"{schedule_audit['duplicate_opponents']} extra ontmoetingen "
+                    "zonder noodzaak door spelersaantal."
+                ),
+                match_ids=duplicate_pair_match_ids,
+            )
+
+    validation_groups = [
+        {
+            "label": "Schema",
+            "checks": [
+                {
+                    "label": "Totaal wedstrijden",
+                    "ok": schedule_audit["actual_matches"]
+                    == schedule_audit["expected_matches"],
+                    "detail": (
+                        f"{schedule_audit['actual_matches']} van "
+                        f"{schedule_audit['expected_matches']}"
+                    ),
+                    "threshold": "Moet exact gelijk zijn.",
+                },
+                {
+                    "label": "Stromanwedstrijden",
+                    "ok": schedule_audit["actual_stroman_matches"]
+                    == schedule_audit["expected_stroman_matches"],
+                    "detail": (
+                        f"{schedule_audit['actual_stroman_matches']} van "
+                        f"{schedule_audit['expected_stroman_matches']}"
+                    ),
+                    "threshold": "0 of 1 volgens spelersaantal en wedstrijdaantal.",
+                },
+                {
+                    "label": "Volle blokken",
+                    "ok": schedule_audit["blocks_valid"],
+                    "detail": "Iedere ronde heeft geldige en unieke blokken.",
+                    "threshold": "Geen dubbele blokken in dezelfde ronde.",
+                },
+            ],
+        },
+        {
+            "label": "Scheidsrechter",
+            "checks": [
+                {
+                    "label": "Scheidsrechterrotatie",
+                    "ok": schedule_audit["referees_valid"],
+                    "detail": "Scheidsrechter speelt niet tegelijk en roteert per blok.",
+                    "threshold": "Moet altijd geldig zijn.",
+                },
+                {
+                    "label": "Scheidsrechterverdeling",
+                    "ok": schedule_audit["referee_distribution_valid"],
+                    "detail": "Verschil tussen min en max schrijversbeurten is beperkt.",
+                    "threshold": "Verschil mag maximaal 1 zijn.",
+                },
+            ],
+        },
+        {
+            "label": "Spelersrondes en tegenstanders",
+            "checks": [
+                {
+                    "label": "Spelersrondes",
+                    "ok": schedule_audit["player_rounds_valid"],
+                    "detail": f"Overlappende spelersrondes: {schedule_audit['player_round_overlaps']}",
+                    "threshold": "Speler rondes lopen door zonder overlap.",
+                },
+                {
+                    "label": "Dubbele ontmoetingen",
+                    "ok": schedule_audit["duplicate_opponents_valid"],
+                    "detail": f"Totaal extra ontmoetingen: {schedule_audit['duplicate_opponents']}",
+                    "threshold": (
+                        "Idealiter 0; toegestaan bij te weinig unieke tegenstanders."
+                    ),
+                },
+            ],
+        },
+    ]
     return {
         "evening": evening,
         "attendances": attendances,
         "matches": matches,
+        "evening_detail_path": reverse("evening_detail", args=[evening.id]),
         "player_progress_chart": player_progress_chart,
         "standings": standings,
         "complete_count": sum(match.is_complete for match in matches),
-        "schedule_audit": {
-            "expected_matches": expected_total_matches,
-            "actual_matches": len(matches),
-            "expected_stroman_matches": expected_stroman_matches,
-            "actual_stroman_matches": stroman_match_total,
-            "player_round_overlaps": player_round_overlaps,
-            "player_rounds_valid": player_rounds_valid and player_round_gaps_valid,
-            "blocks_valid": blocks_valid,
-            "referees_valid": referees_valid,
-            "referee_distribution_valid": referee_distribution_valid,
-            "duplicate_opponents": duplicate_opponents_total,
-            "duplicate_opponents_allowed": duplicate_opponents_allowed,
-            "duplicate_opponents_valid": duplicate_opponents_valid,
-            "valid": (
-                len(matches) == expected_total_matches
-                and stroman_match_total == expected_stroman_matches
-                and stroman_match_is_last
-                and all(
-                    match_counts[attendance.player_id]
-                    - stroman_match_counts[attendance.player_id]
-                    == evening.match_count
-                    and stroman_match_counts[attendance.player_id] <= 1
-                    for attendance in attendances
-                )
-                and rounds_valid
-                and player_rounds_valid
-                and player_round_gaps_valid
-                and blocks_valid
-                and referees_valid
-                and referee_distribution_valid
-                and duplicate_opponents_valid
-            ),
-        },
-        "match_audit": [
-            {
-                "attendance": attendance,
-                "matches": (
-                    match_counts[attendance.player_id]
-                    - stroman_match_counts[attendance.player_id]
-                ),
-                "stroman_matches": stroman_match_counts[attendance.player_id],
-                "duplicate_opponents": duplicate_opponents_by_player[
-                    attendance.player_id
-                ],
-                "duplicate_opponents_valid": duplicate_opponents_valid_by_player[
-                    attendance.player_id
-                ],
-                "referees": referee_counts[attendance.player_id],
-                "max_consecutive_rest": max_consecutive_rest[attendance.player_id],
-                "max_consecutive_matches": max_consecutive_matches[attendance.player_id],
-                "expected_matches": evening.match_count,
-                "block_rounds": ", ".join(
-                    str(block_round)
-                    for block_round in sorted(
-                        block_rounds_by_player.get(attendance.player_id, [])
-                    )
-                ),
-                "player_round_number": max(
-                    player_rounds_by_player.get(attendance.player_id, []),
-                    default=0,
-                ),
-                "player_rounds": ", ".join(
-                    str(value)
-                    for value in player_rounds_by_player.get(
-                        attendance.player_id, []
-                    )
-                ),
-                "player_rounds_valid": (
-                    player_rounds_by_player.get(attendance.player_id, [])
-                    == list(
-                        range(
-                            1,
-                            evening.match_count
-                            + stroman_match_counts[attendance.player_id]
-                            + 1,
-                        )
-                    )
-                ),
-            }
-            for attendance in attendances
-        ],
+        "schedule_audit": schedule_audit,
+        "match_audit": match_audit,
+        "match_issue_map": match_issues,
+        "issue_match_ids": issue_match_ids,
+        "attention_items": attention_items,
+        "validation_groups": validation_groups,
     }
 
 
@@ -594,6 +832,12 @@ def evening_standings_view(request, evening_id):
     context = _evening_context(evening)
     context["live_token"] = _evening_live_token(evening)
     return render(request, "bullets/evening_standings.html", context)
+
+
+def evening_validation_view(request, evening_id):
+    evening = get_object_or_404(Evening.objects.select_related("season"), pk=evening_id)
+    context = _evening_context(evening)
+    return render(request, "bullets/evening_validation.html", context)
 
 
 def evening_standings_live_state(request, evening_id):

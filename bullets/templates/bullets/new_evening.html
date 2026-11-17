@@ -29,6 +29,13 @@
         {% for error in form.match_count.errors %}<span class="error">{{ error }}</span>{% endfor %}
       </div>
     </div>
+    <div id="preflight-panel" class="small-field-note" aria-live="polite">
+      <div class="preflight-status">
+        <strong>Aanmaakcontrole</strong>
+        <span id="preflight-status-badge" class="status-pill status-error">Niet planbaar</span>
+      </div>
+      <ul id="preflight-checks" class="preflight-checks"></ul>
+    </div>
     <div id="stroman-options" class="stroman-options">
       <div class="stroman-auto-control">
         <label for="{{ form.auto_stroman.id_for_label }}">{{ form.auto_stroman }} {{ form.auto_stroman.label }}</label>
@@ -91,6 +98,8 @@
   const submitButton = document.getElementById("create-evening-submit");
   const loadingOverlay = document.getElementById("create-evening-loading");
   const stromanNote = document.getElementById("stroman-note");
+  const preflightStatusBadge = document.getElementById("preflight-status-badge");
+  const preflightChecks = document.getElementById("preflight-checks");
   const names = new Map(checkboxes.map(box => [box.value, box.closest("label").textContent.trim()]));
   const selectedOrder = (() => {
     try { return JSON.parse(orderInput.value || "[]").map(String); }
@@ -171,6 +180,75 @@
     checkboxes.filter(box => !order.includes(box.value)).forEach(box => {
       box.closest("label").querySelector(".draw-number").textContent = "";
     });
+    const preflightItems = [];
+    const failures = [];
+    const warnings = [];
+    const requiredPlayersForBoards = boardCount * 3;
+    if (order.length < requiredPlayersForBoards) {
+      failures.push({
+        label: `Spelers en blokken: ${order.length}/${requiredPlayersForBoards}`,
+        reason: `Waarom? Met ${boardCount} blokken zijn minimaal ${requiredPlayersForBoards} spelers nodig om elke blokronde te vullen.`,
+      });
+    } else {
+      preflightItems.push({
+        label: `Spelers en blokken: ${order.length}/${requiredPlayersForBoards}`,
+        reason: "Waarom? Er zijn voldoende spelers om de gevraagde blokken te vullen.",
+      });
+    }
+    if (needsStroman && !autoStromanInput.checked && !stromanInput.value) {
+      failures.push({
+        label: "Stroman: ontbreekt",
+        reason: "Waarom? Bij oneven spelers en oneven wedstrijden is een stroman verplicht.",
+      });
+    } else if (needsStroman && autoStromanInput.checked) {
+      preflightItems.push({
+        label: "Stroman: auto loting actief",
+        reason: "Waarom? Deze combinatie heeft een stroman nodig en auto-loting is ingeschakeld.",
+      });
+    } else if (needsStroman) {
+      preflightItems.push({
+        label: "Stroman: handmatig gekozen",
+        reason: "Waarom? Deze combinatie heeft een stroman nodig en er is een speler gekozen.",
+      });
+    } else {
+      preflightItems.push({
+        label: "Stroman: niet nodig",
+        reason: "Waarom? Deze combinatie van spelers en wedstrijden vereist geen stroman.",
+      });
+    }
+    const requiredUniqueOpponents = Number(matchCount) + (needsStroman ? 1 : 0);
+    const maxUniqueOpponents = Math.max(0, order.length - 1);
+    if (order.length >= 4 && requiredUniqueOpponents > maxUniqueOpponents) {
+      warnings.push({
+        label: "Kans op dubbele ontmoetingen: hoog",
+        reason: `Waarom? Er zijn maximaal ${maxUniqueOpponents} unieke tegenstanders, maar ${requiredUniqueOpponents} ontmoetingen per speler nodig.`,
+      });
+    } else {
+      preflightItems.push({
+        label: "Kans op dubbele ontmoetingen: normaal",
+        reason: "Waarom? Het aantal unieke tegenstanders is doorgaans voldoende.",
+      });
+    }
+    preflightChecks.replaceChildren();
+    [...failures, ...warnings, ...preflightItems].forEach((item) => {
+      const li = document.createElement("li");
+      li.textContent = item.label;
+      const why = document.createElement("small");
+      why.textContent = item.reason;
+      li.append(why);
+      preflightChecks.append(li);
+    });
+    preflightStatusBadge.className = "status-pill";
+    if (failures.length > 0) {
+      preflightStatusBadge.textContent = "Niet planbaar";
+      preflightStatusBadge.classList.add("status-error");
+    } else if (warnings.length > 0) {
+      preflightStatusBadge.textContent = "Let op";
+      preflightStatusBadge.classList.add("status-warning");
+    } else {
+      preflightStatusBadge.textContent = "Planbaar";
+      preflightStatusBadge.classList.add("status-ok");
+    }
   }
   boardCountInput.addEventListener("input", render);
   applyBoardRestAdvice.addEventListener("click", () => {
@@ -180,6 +258,11 @@
   matchCountInput.addEventListener("input", render);
   autoStromanInput.addEventListener("change", render);
   let formSubmitting = false;
+  const resetSubmitState = () => {
+    formSubmitting = false;
+    submitButton.disabled = false;
+    loadingOverlay.hidden = true;
+  };
   form.addEventListener("submit", (event) => {
     if (formSubmitting) {
       event.preventDefault();
@@ -192,6 +275,8 @@
     submitButton.disabled = true;
     loadingOverlay.hidden = false;
   });
+  window.addEventListener("pageshow", resetSubmitState);
+  resetSubmitState();
   render();
 })();
 </script>
