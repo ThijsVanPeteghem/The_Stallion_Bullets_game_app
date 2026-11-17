@@ -998,12 +998,17 @@ class CompetitionFlowTests(TestCase):
         self.assertTrue(response.context["schedule_audit"]["blocks_valid"])
         self.assertTrue(response.context["schedule_audit"]["referees_valid"])
         self.assertTrue(response.context["schedule_audit"]["referee_distribution_valid"])
+        self.assertTrue(response.context["schedule_audit"]["duplicate_opponents_valid"])
+        self.assertEqual(response.context["schedule_audit"]["duplicate_opponents"], 0)
         self.assertTrue(
             all(
                 row["player_round_number"]
                 == row["matches"] + row["stroman_matches"]
                 for row in response.context["match_audit"]
             )
+        )
+        self.assertTrue(
+            all(row["duplicate_opponents"] == 0 for row in response.context["match_audit"])
         )
 
     def test_evening_audit_rejects_broken_block_referee_and_distribution_rules(self):
@@ -1069,6 +1074,65 @@ class CompetitionFlowTests(TestCase):
             self.assertEqual(row["max_consecutive_rest"], 0)
             self.assertEqual(row["max_consecutive_matches"], 0)
             self.assertEqual(row["block_rounds"], "")
+
+    def test_evening_audit_counts_duplicate_opponents_per_player(self):
+        from .views import _evening_context
+
+        evening = Evening.objects.create(
+            season=self.season, date="2026-11-05", board_count=1, match_count=2
+        )
+        first, second, third, fourth = self.players[:4]
+        for order, player in enumerate((first, second, third, fourth), start=1):
+            Attendance.objects.create(evening=evening, player=player, draw_order=order)
+        Match.objects.create(
+            evening=evening,
+            number=1,
+            round_number=1,
+            board=1,
+            player1=first,
+            player2=second,
+            referee=third,
+        )
+        Match.objects.create(
+            evening=evening,
+            number=2,
+            round_number=2,
+            board=1,
+            player1=third,
+            player2=fourth,
+            referee=first,
+        )
+        Match.objects.create(
+            evening=evening,
+            number=3,
+            round_number=3,
+            board=1,
+            player1=first,
+            player2=second,
+            referee=fourth,
+        )
+        Match.objects.create(
+            evening=evening,
+            number=4,
+            round_number=4,
+            board=1,
+            player1=third,
+            player2=fourth,
+            referee=second,
+        )
+
+        context = _evening_context(evening)
+        self.assertEqual(context["schedule_audit"]["duplicate_opponents"], 4)
+        self.assertFalse(context["schedule_audit"]["duplicate_opponents_allowed"])
+        self.assertFalse(context["schedule_audit"]["duplicate_opponents_valid"])
+        self.assertFalse(context["schedule_audit"]["valid"])
+        self.assertEqual(
+            {
+                row["attendance"].player_id: row["duplicate_opponents"]
+                for row in context["match_audit"]
+            },
+            {first.id: 1, second.id: 1, third.id: 1, fourth.id: 1},
+        )
 
     def test_season_standings_use_the_requested_tie_break_order(self):
         players_by_name = {

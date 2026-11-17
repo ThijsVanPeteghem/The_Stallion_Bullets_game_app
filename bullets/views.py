@@ -393,6 +393,39 @@ def _evening_context(evening):
             for match in matches
         )
     )
+    opponent_counts_by_player = {}
+    for match in matches:
+        if match.player1_id is None or match.player2_id is None:
+            continue
+        opponent_counts_by_player.setdefault(match.player1_id, Counter())[
+            match.player2_id
+        ] += 1
+        opponent_counts_by_player.setdefault(match.player2_id, Counter())[
+            match.player1_id
+        ] += 1
+    duplicate_opponents_by_player = {
+        attendance.player_id: sum(
+            max(0, meetings - 1)
+            for meetings in opponent_counts_by_player.get(
+                attendance.player_id, Counter()
+            ).values()
+        )
+        for attendance in attendances
+    }
+    duplicate_opponents_allowed = any(
+        evening.match_count + stroman_match_counts[attendance.player_id]
+        > max(0, len(players) - 1)
+        for attendance in attendances
+    )
+    duplicate_opponents_valid_by_player = {
+        attendance.player_id: (
+            duplicate_opponents_by_player[attendance.player_id] == 0
+            or duplicate_opponents_allowed
+        )
+        for attendance in attendances
+    }
+    duplicate_opponents_total = sum(duplicate_opponents_by_player.values())
+    duplicate_opponents_valid = all(duplicate_opponents_valid_by_player.values())
     referee_counts = Counter(
         match.referee_id for match in matches if match.referee_id is not None
     )
@@ -449,6 +482,9 @@ def _evening_context(evening):
             "blocks_valid": blocks_valid,
             "referees_valid": referees_valid,
             "referee_distribution_valid": referee_distribution_valid,
+            "duplicate_opponents": duplicate_opponents_total,
+            "duplicate_opponents_allowed": duplicate_opponents_allowed,
+            "duplicate_opponents_valid": duplicate_opponents_valid,
             "valid": (
                 len(matches) == expected_total_matches
                 and stroman_match_total == expected_stroman_matches
@@ -466,6 +502,7 @@ def _evening_context(evening):
                 and blocks_valid
                 and referees_valid
                 and referee_distribution_valid
+                and duplicate_opponents_valid
             ),
         },
         "match_audit": [
@@ -476,6 +513,12 @@ def _evening_context(evening):
                     - stroman_match_counts[attendance.player_id]
                 ),
                 "stroman_matches": stroman_match_counts[attendance.player_id],
+                "duplicate_opponents": duplicate_opponents_by_player[
+                    attendance.player_id
+                ],
+                "duplicate_opponents_valid": duplicate_opponents_valid_by_player[
+                    attendance.player_id
+                ],
                 "referees": referee_counts[attendance.player_id],
                 "max_consecutive_rest": max_consecutive_rest[attendance.player_id],
                 "max_consecutive_matches": max_consecutive_matches[attendance.player_id],
