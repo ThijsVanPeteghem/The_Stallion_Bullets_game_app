@@ -46,7 +46,7 @@ class AboutPageTests(SimpleTestCase):
         self.assertContains(response, f"Versie V{settings.APP_VERSION}")
         self.assertContains(response, "Developed by Peetje Pijltje aka ROOKIE VAN HET JAAR seizoen 2025/2026")
         self.assertContains(response, "Release notes")
-        self.assertContains(response, "V2.5.0 (nieuw sinds V2.4.2)")
+        self.assertContains(response, "V2.5.1 (nieuw sinds V2.5.0)")
         self.assertEqual(response.context["app_version"], settings.APP_VERSION)
 
 
@@ -1659,7 +1659,7 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "Minste pijlen per leg")
         self.assertContains(response, "Scheidsbeurten")
 
-    def test_player_detail_groups_statistics_by_season_and_defaults_to_latest_created_evening(self):
+    def test_player_detail_groups_statistics_by_season_and_defaults_to_latest_evening_date(self):
         player = self.players[0]
         old_match = Match.objects.filter(
             evening=self.evening,
@@ -1696,11 +1696,11 @@ class CompetitionFlowTests(TestCase):
         )
 
         default_response = self.client.get(reverse("player_detail", args=[player.id]))
-        self.assertEqual(default_response.context["selected_season"], latest_season)
-        self.assertEqual(default_response.context["totals"]["scores_180"], 7)
+        self.assertEqual(default_response.context["selected_season"], self.season)
+        self.assertEqual(default_response.context["totals"]["scores_180"], 2)
         self.assertEqual(
-            [row["match"].id for row in default_response.context["matches"]],
-            [latest_match.id],
+            {row["match"].evening.season_id for row in default_response.context["matches"]},
+            {self.season.id},
         )
 
         old_season_response = self.client.get(

@@ -76,12 +76,12 @@ def players(request):
 def player_detail(request, player_id):
     player = get_object_or_404(Player, pk=player_id)
     seasons = list(
-        Season.objects.annotate(latest_evening_created=Max("evenings__created_at"))
-        .filter(latest_evening_created__isnull=False)
-        .order_by("-latest_evening_created", "-pk")
+        Season.objects.annotate(latest_evening_date=Max("evenings__date"))
+        .filter(latest_evening_date__isnull=False)
+        .order_by("-latest_evening_date", "-pk")
     )
     latest_evening = Evening.objects.select_related("season").order_by(
-        "-created_at", "-pk"
+        "-date", "-pk"
     ).first()
     requested_season = request.GET.get("season")
     if requested_season:
