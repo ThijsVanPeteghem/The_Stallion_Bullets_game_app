@@ -881,12 +881,24 @@ def delete_evening(request, evening_id):
     return render(request, "bullets/evening_confirm_delete.html", {"evening": evening})
 
 
+def _match_return_to(request, match):
+    candidate = request.POST.get("return_to") or request.GET.get("return_to")
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return reverse("evening_detail", args=[match.evening_id])
+
+
 def edit_match(request, match_id):
     match = get_object_or_404(
         Match.objects.select_related("evening", "evening__season", "player1", "player2", "referee")
         .prefetch_related("stats"),
         pk=match_id,
     )
+    return_to = _match_return_to(request, match)
     form = MatchResultForm(request.POST or None, match=match)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -901,7 +913,7 @@ def edit_match(request, match_id):
                 stat.scores_171 = form.cleaned_data[f"{prefix}_171"]
                 stat.least_darts = form.cleaned_data[f"{prefix}_least_darts"]
                 stat.save()
-        return redirect("evening_detail", evening_id=match.evening_id)
+        return redirect(return_to)
     return render(
         request,
         "bullets/match_edit.html",
@@ -909,6 +921,7 @@ def edit_match(request, match_id):
             "match": match,
             "form": form,
             "evening": match.evening,
+            "return_to": return_to,
             "stroman_player_ids": {
                 stat.player_id for stat in match.stats.all() if stat.is_stroman
             },

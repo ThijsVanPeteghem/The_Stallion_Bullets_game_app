@@ -44,6 +44,7 @@ class AboutPageTests(SimpleTestCase):
         self.assertTemplateUsed(response, "bullets/about.html")
         self.assertContains(response, "Over deze app")
         self.assertContains(response, f"Versie V{settings.APP_VERSION}")
+        self.assertContains(response, "Developed by Peetje Pijltje aka ROOKIE VAN HET JAAR seizoen 2025/2026")
         self.assertEqual(response.context["app_version"], settings.APP_VERSION)
 
 
@@ -2127,6 +2128,36 @@ class CompetitionFlowTests(TestCase):
         self.assertNotContains(print_response, "<td>0</td>")
         self.assertContains(print_response, "01/10/2026")
         self.assertNotContains(print_response, "Briefjes kopiëren voor WordPress")
+
+    def test_match_edit_cancel_and_save_use_return_to(self):
+        match = Match.objects.filter(evening=self.evening, player2__isnull=False).first()
+        return_to = f"{reverse('evening_detail', args=[self.evening.id])}#match-anchor-{match.id}"
+        result_url = reverse("edit_match", args=[match.id])
+
+        response = self.client.get(result_url, {"return_to": return_to})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="{return_to}"')
+        self.assertContains(response, f'name="return_to" value="{return_to}"')
+
+        post_response = self.client.post(
+            result_url,
+            {
+                "return_to": return_to,
+                "p1_legs": "2",
+                "p1_high_finishes": "",
+                "p1_171": "0",
+                "p1_180": "0",
+                "p1_least_darts": "",
+                "p2_legs": "1",
+                "p2_high_finishes": "",
+                "p2_171": "0",
+                "p2_180": "0",
+                "p2_least_darts": "",
+            },
+        )
+        self.assertEqual(post_response.status_code, 302)
+        self.assertEqual(post_response["Location"], return_to)
 
     def test_print_slip_includes_recorded_player_statistics(self):
         match = self.evening.matches.filter(player2__isnull=False).first()
