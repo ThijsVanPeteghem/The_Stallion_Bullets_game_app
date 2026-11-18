@@ -46,7 +46,7 @@ class AboutPageTests(SimpleTestCase):
         self.assertContains(response, f"Versie V{settings.APP_VERSION}")
         self.assertContains(response, "Developed by Peetje Pijltje aka ROOKIE VAN HET JAAR seizoen 2025/2026")
         self.assertContains(response, "Release notes")
-        self.assertContains(response, "V2.5.1 (nieuw sinds V2.5.0)")
+        self.assertContains(response, "V2.5.2 (nieuw sinds V2.5.1)")
         self.assertEqual(response.context["app_version"], settings.APP_VERSION)
 
 
@@ -1513,6 +1513,8 @@ class CompetitionFlowTests(TestCase):
         self.assertContains(response, "id=\"preflight-status-badge\"")
         self.assertContains(response, "Niet planbaar")
         self.assertContains(response, "Waarom?")
+        self.assertContains(response, 'id="duplicate-date-warning"')
+        self.assertContains(response, 'id="season-evening-dates-data"')
         self.assertContains(response, 'id="create-evening-loading"')
         self.assertContains(response, 'id="create-evening-submit"')
 

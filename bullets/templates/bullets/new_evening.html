@@ -17,6 +17,7 @@
       <div>
         {{ form.date.label_tag }}{{ form.date }}
         {% for error in form.date.errors %}<span class="error">{{ error }}</span>{% endfor %}
+        <span id="duplicate-date-warning" class="error" hidden>In dit seizoen bestaat al een competitieavond op deze datum.</span>
       </div>
       <div>
         {{ form.board_count.label_tag }}{{ form.board_count }}
@@ -79,9 +80,13 @@
     <p>Avond wordt aangemaakt… even geduld.</p>
   </div>
 </div>
+{{ season_evening_dates|json_script:"season-evening-dates-data" }}
 <script>
 (() => {
   const form = document.querySelector("form[method='post']");
+  const seasonInput = document.getElementById("id_season");
+  const dateInput = document.getElementById("id_date");
+  const duplicateDateWarning = document.getElementById("duplicate-date-warning");
   const checkboxes = [...document.querySelectorAll('input[name="players"]')];
   const orderInput = document.getElementById("id_draw_order");
   const orderList = document.getElementById("draw-order-list");
@@ -100,7 +105,30 @@
   const stromanNote = document.getElementById("stroman-note");
   const preflightStatusBadge = document.getElementById("preflight-status-badge");
   const preflightChecks = document.getElementById("preflight-checks");
+  const seasonEveningDates = JSON.parse(document.getElementById("season-evening-dates-data").textContent);
   const names = new Map(checkboxes.map(box => [box.value, box.closest("label").textContent.trim()]));
+  const parseDutchDate = (value) => {
+    const parts = value.trim().split("/");
+    if (parts.length !== 3) return null;
+    const [dayRaw, monthRaw, yearRaw] = parts;
+    const day = Number(dayRaw);
+    const month = Number(monthRaw);
+    const year = Number(yearRaw);
+    if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return null;
+    const parsed = new Date(year, month - 1, day);
+    if (
+      parsed.getFullYear() !== year
+      || parsed.getMonth() !== month - 1
+      || parsed.getDate() !== day
+    ) {
+      return null;
+    }
+    return [
+      parsed.getFullYear(),
+      String(parsed.getMonth() + 1).padStart(2, "0"),
+      String(parsed.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
   const selectedOrder = (() => {
     try { return JSON.parse(orderInput.value || "[]").map(String); }
     catch { return []; }
@@ -168,15 +196,15 @@
       empty.style.gridColumn = "1 / -1";
       empty.textContent = "Vink spelers aan om hun volgorde te bepalen.";
       orderList.append(empty);
-      return;
+    } else {
+      order.forEach((id, index) => {
+        const checkbox = checkboxes.find(box => box.value === id);
+        checkbox.closest("label").querySelector(".draw-number").textContent = `${index + 1}`;
+        const item = document.createElement("li");
+        item.textContent = `${index + 1}. ${names.get(id)}`;
+        orderList.append(item);
+      });
     }
-    order.forEach((id, index) => {
-      const checkbox = checkboxes.find(box => box.value === id);
-      checkbox.closest("label").querySelector(".draw-number").textContent = `${index + 1}`;
-      const item = document.createElement("li");
-      item.textContent = `${index + 1}. ${names.get(id)}`;
-      orderList.append(item);
-    });
     checkboxes.filter(box => !order.includes(box.value)).forEach(box => {
       box.closest("label").querySelector(".draw-number").textContent = "";
     });
@@ -229,6 +257,20 @@
         reason: "Waarom? Het aantal unieke tegenstanders is doorgaans voldoende.",
       });
     }
+    const selectedSeasonId = seasonInput.value;
+    const selectedDateIso = parseDutchDate(dateInput.value || "");
+    const dateAlreadyExists = Boolean(
+      selectedSeasonId
+      && selectedDateIso
+      && (seasonEveningDates[selectedSeasonId] || []).includes(selectedDateIso)
+    );
+    duplicateDateWarning.hidden = !dateAlreadyExists;
+    if (dateAlreadyExists) {
+      failures.push({
+        label: "Datum: bestaat al in dit seizoen",
+        reason: "Waarom? Deze datum is al gebruikt voor een andere competitieavond in hetzelfde seizoen.",
+      });
+    }
     preflightChecks.replaceChildren();
     [...failures, ...warnings, ...preflightItems].forEach((item) => {
       const li = document.createElement("li");
@@ -255,6 +297,9 @@
     boardCountInput.value = applyBoardRestAdvice.dataset.boardCount;
     render();
   });
+  seasonInput.addEventListener("change", render);
+  dateInput.addEventListener("input", render);
+  dateInput.addEventListener("change", render);
   matchCountInput.addEventListener("input", render);
   autoStromanInput.addEventListener("change", render);
   let formSubmitting = false;

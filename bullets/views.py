@@ -217,7 +217,14 @@ def delete_season(request, season_id):
 
 def new_evening(request):
     form = EveningForm(request.POST or None)
-    context = {"form": form}
+    season_evening_dates = {}
+    for season_id, evening_date in Evening.objects.values_list(
+        "season_id", "date"
+    ).order_by("season_id", "date"):
+        season_evening_dates.setdefault(str(season_id), []).append(
+            evening_date.isoformat()
+        )
+    context = {"form": form, "season_evening_dates": season_evening_dates}
     if request.method == "POST" and form.is_valid():
         try:
             evening = create_evening(
