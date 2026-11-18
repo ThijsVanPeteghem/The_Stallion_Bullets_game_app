@@ -45,6 +45,8 @@ class AboutPageTests(SimpleTestCase):
         self.assertContains(response, "Over deze app")
         self.assertContains(response, f"Versie V{settings.APP_VERSION}")
         self.assertContains(response, "Developed by Peetje Pijltje aka ROOKIE VAN HET JAAR seizoen 2025/2026")
+        self.assertContains(response, "Release notes")
+        self.assertContains(response, "V2.5.0 (nieuw sinds V2.4.2)")
         self.assertEqual(response.context["app_version"], settings.APP_VERSION)
 
 
